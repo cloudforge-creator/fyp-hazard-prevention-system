@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Register Device for Alerts</title>
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js"></script>
+<style>
+  body{font-family:sans-serif;max-width:480px;margin:60px auto;padding:0 20px;
+       text-align:center;background:#0f1117;color:#e2e8f0}
+  h1{font-size:1.4rem;margin-bottom:8px}
+  p{color:#a0aec0;font-size:14px;line-height:1.6;margin-bottom:24px}
+  button{background:#3b82f6;color:#fff;border:none;padding:12px 32px;
+         border-radius:8px;font-size:14px;cursor:pointer;width:100%}
+  button:hover{background:#2563eb}
+  .status{margin-top:20px;padding:12px;border-radius:8px;font-size:13px;display:none}
+  .ok{background:#1a3a2a;color:#48bb78;border:1px solid #276749}
+  .err{background:#3a1a1a;color:#fc8181;border:1px solid #822727}
+  code{background:#1a1d27;padding:4px 8px;border-radius:4px;font-size:12px;
+       display:block;margin-top:8px;word-break:break-all;color:#a0aec0}
+</style>
+</head>
+<body>
+<h1>Register this device for hazard alerts</h1>
+<p>Open this page on the admin phone. Click the button below to enable
+push notifications. You will receive instant alerts when a hazard is detected.</p>
+<p>Works on Android and iPhone (requires iOS 16.4+ with Add to Home Screen).</p>
+<button onclick="registerDevice()">Enable push notifications on this device</button>
+<div class="status ok" id="ok-box">
+  <strong>Device registered successfully!</strong>
+  <p>You will now receive push notifications for hazard alerts.</p>
+  <p>Your token:</p>
+  <code id="token-display"></code>
+</div>
+<div class="status err" id="err-box">
+  <strong>Registration failed</strong>
+  <p id="err-msg"></p>
+</div>
+
+<script>
+// ---- CONFIGURE THESE - copy from your Firebase console ----
+const firebaseConfig = {
+  apiKey:            "YOUR_API_KEY",           // Firebase console -> Project settings -> General
+  authDomain:        "YOUR_PROJECT.firebaseapp.com",
+  databaseURL:       "https://YOUR_PROJECT-rtdb.firebaseio.com",
+  projectId:         "YOUR_PROJECT_ID",
+  storageBucket:     "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId:             "YOUR_APP_ID"
+};
+const VAPID_KEY = "YOUR_VAPID_KEY"; // Firebase console -> Cloud Messaging -> Web Push certificates
+// ----------------------------------------------------------
+
+firebase.initializeApp(firebaseConfig);
+const messaging = firebase.messaging();
+
+async function registerDevice() {
+  try {
+    // Request notification permission
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      showError("Notification permission denied. Please enable in browser settings.");
+      return;
+    }
+
+    // Register service worker (needed for background notifications)
+    const sw = await navigator.serviceWorker.register('/static/js/firebase-sw.js');
+
+    // Get FCM token
+    const token = await messaging.getToken({
+      vapidKey:           VAPID_KEY,
+      serviceWorkerRegistration: sw
+    });
+
+    if (!token) {
+      showError("Failed to get token. Check VAPID key and Firebase config.");
+      return;
+    }
+
+    // Save token to Firebase database at /admin_token
+    const db  = firebase.database();
+    await db.ref('/admin_token').set(token);
+
+    showSuccess(token);
+
+  } catch (err) {
+    showError(err.message || "Unknown error");
+  }
+}
+
+function showSuccess(token) {
+  document.getElementById('ok-box').style.display = 'block';
+  document.getElementById('err-box').style.display = 'none';
+  document.getElementById('token-display').textContent = token;
+}
+
+function showError(msg) {
+  document.getElementById('err-box').style.display = 'block';
+  document.getElementById('ok-box').style.display = 'none';
+  document.getElementById('err-msg').textContent = msg;
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+# Virtual environment - never push this
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Firebase private key - NEVER push this
+serviceAccountKey.json
+
+# Large model files - optional to push
+# models/*.h5
+# models/*.pkl
+
+# VS Code settings
+.vscode/
+
+# Dataset images - too large for GitHub
+data/fire_images/
+
+# Plots
+notebooks/plots/
+
+# OS files
+.DS_Store
+Thumbs.db

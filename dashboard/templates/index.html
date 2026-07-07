@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Predictive AI Hazard Prevention System</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',sans-serif;background:#0f1117;color:#e2e8f0;min-height:100vh}
+  header{background:#1a1d27;padding:1rem 2rem;border-bottom:1px solid #2d3142;
+         display:flex;align-items:center;justify-content:space-between}
+  header h1{font-size:1.1rem;font-weight:500;color:#a0aec0}
+  header h1 span{color:#fff;font-weight:600}
+  .uptime{font-size:12px;color:#718096}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+        gap:1rem;padding:1.5rem}
+  .card{background:#1a1d27;border:1px solid #2d3142;border-radius:12px;padding:1.25rem}
+  .card-label{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;
+              color:#718096;margin-bottom:6px}
+  .card-value{font-size:2rem;font-weight:600;color:#fff}
+  .card-sub{font-size:12px;color:#718096;margin-top:4px}
+  .risk-badge{display:inline-block;padding:6px 18px;border-radius:20px;
+              font-size:14px;font-weight:600;letter-spacing:0.05em}
+  .risk-badge.SAFE{background:#1a3a2a;color:#48bb78;border:1px solid #276749}
+  .risk-badge.WARNING{background:#3a2e1a;color:#f6ad55;border:1px solid #7b5e2a}
+  .risk-badge.CRITICAL{background:#3a1a1a;color:#fc8181;border:1px solid #822727;
+                        animation:pulse 1s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+  .main-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;padding:0 1.5rem 1.5rem}
+  .section-title{font-size:12px;text-transform:uppercase;letter-spacing:0.08em;
+                 color:#718096;margin-bottom:12px}
+  .camera-box{background:#000;border:1px solid #2d3142;border-radius:12px;
+              overflow:hidden;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center}
+  .camera-box img{width:100%;height:100%;object-fit:cover}
+  .no-cam{color:#4a5568;font-size:13px}
+  .bar-wrap{background:#2d3142;border-radius:4px;height:8px;margin-top:6px}
+  .bar{height:8px;border-radius:4px;transition:width 0.5s ease}
+  .bar.green{background:#48bb78}
+  .bar.orange{background:#f6ad55}
+  .bar.red{background:#fc8181}
+  .event-table{width:100%;border-collapse:collapse;font-size:13px}
+  .event-table th{text-align:left;padding:8px 12px;font-size:11px;
+                  text-transform:uppercase;letter-spacing:0.06em;
+                  color:#718096;border-bottom:1px solid #2d3142}
+  .event-table td{padding:8px 12px;border-bottom:1px solid #1a1d27;color:#a0aec0}
+  .event-table tr:hover td{background:#1e2130}
+  .lv-SAFE{color:#48bb78}
+  .lv-WARNING{color:#f6ad55}
+  .lv-CRITICAL{color:#fc8181;font-weight:600}
+  .status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+  .dot-green{background:#48bb78;box-shadow:0 0 6px #48bb78}
+  .dot-orange{background:#f6ad55}
+  .dot-red{background:#fc8181;box-shadow:0 0 6px #fc8181;animation:pulse 1s infinite}
+  .full-col{grid-column:1/-1}
+  .score-row{display:flex;justify-content:space-between;align-items:center;
+             padding:8px 0;border-bottom:1px solid #2d3142;font-size:13px}
+  .score-row:last-child{border:none}
+  .score-label{color:#718096}
+  .score-val{color:#fff;font-weight:500}
+  @media(max-width:700px){.main-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Predictive AI <span>Hazard Prevention System</span></h1>
+  <div class="uptime">Uptime: <span id="uptime">0s</span></div>
+</header>
+
+<!-- Top metric cards -->
+<div class="grid">
+  <div class="card">
+    <div class="card-label">Risk level</div>
+    <div><span class="risk-badge SAFE" id="risk-badge">SAFE</span></div>
+    <div class="card-sub" id="risk-score-sub">Score: 0.00</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Gas detected</div>
+    <div class="card-value" id="gas-type" style="font-size:1.4rem">—</div>
+    <div class="card-sub">Risk: <span id="gas-risk">0%</span></div>
+    <div class="bar-wrap"><div class="bar green" id="gas-bar" style="width:0%"></div></div>
+  </div>
+  <div class="card">
+    <div class="card-label">Temperature</div>
+    <div class="card-value" id="temperature">—</div>
+    <div class="card-sub">Anomaly: <span id="temp-anomaly">No</span></div>
+  </div>
+  <div class="card">
+    <div class="card-label">Humidity</div>
+    <div class="card-value" id="humidity">—</div>
+    <div class="card-sub">%RH</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Fire probability (CNN)</div>
+    <div class="card-value" id="fire-prob">0%</div>
+    <div class="bar-wrap"><div class="bar green" id="fire-bar" style="width:0%"></div></div>
+  </div>
+</div>
+
+<!-- Main grid: camera + events -->
+<div class="main-grid">
+
+  <div class="card">
+    <div class="section-title">Live camera feed — CNN fire detection</div>
+    <div class="camera-box">
+      <img id="camera-feed" src="/video" alt="Camera feed"
+           onerror="this.style.display='none';document.getElementById('no-cam').style.display='flex'">
+      <div id="no-cam" class="no-cam" style="display:none">No camera connected</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Model scores this cycle</div>
+    <div id="model-scores">
+      <div class="score-row">
+        <div class="score-label">CNN (fire) score</div>
+        <div class="score-val" id="cnn-score">—</div>
+      </div>
+      <div class="score-row">
+        <div class="score-label">RF (gas) score</div>
+        <div class="score-val" id="rf-score">—</div>
+      </div>
+      <div class="score-row">
+        <div class="score-label">LSTM (temp) score</div>
+        <div class="score-val" id="lstm-score">—</div>
+      </div>
+      <div class="score-row">
+        <div class="score-label">Fused score</div>
+        <div class="score-val" id="fused-score">—</div>
+      </div>
+      <div class="score-row">
+        <div class="score-label">Decision method</div>
+        <div class="score-val" id="method">—</div>
+      </div>
+      <div class="score-row">
+        <div class="score-label">Cycle count</div>
+        <div class="score-val" id="cycle">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card full-col">
+    <div class="section-title">Alert event history (last 20)</div>
+    <div style="overflow-x:auto">
+      <table class="event-table">
+        <thead>
+          <tr>
+            <th>Time</th><th>Level</th><th>Gas</th>
+            <th>Risk score</th><th>Fire prob</th>
+          </tr>
+        </thead>
+        <tbody id="event-tbody">
+          <tr><td colspan="5" style="color:#4a5568;text-align:center;padding:20px">
+            No events yet — system monitoring...
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function colorClass(pct) {
+  if (pct < 35) return 'green';
+  if (pct < 65) return 'orange';
+  return 'red';
+}
+
+function updateBadge(level) {
+  const b = document.getElementById('risk-badge');
+  b.className = 'risk-badge ' + level;
+  b.textContent = level;
+}
+
+function setBar(id, pct) {
+  const el = document.getElementById(id);
+  el.style.width = Math.min(100, pct) + '%';
+  el.className = 'bar ' + colorClass(pct);
+}
+
+function pollData() {
+  fetch('/data')
+    .then(r => r.json())
+    .then(d => {
+      updateBadge(d.risk_level || 'SAFE');
+      document.getElementById('risk-score-sub').textContent =
+          'Score: ' + (d.risk_score || 0).toFixed(3);
+
+      document.getElementById('gas-type').textContent =
+          (d.gas || '—').toUpperCase();
+      const grPct = Math.round((d.gas_risk || 0) * 100);
+      document.getElementById('gas-risk').textContent = grPct + '%';
+      setBar('gas-bar', grPct);
+
+      const temp = d.temperature;
+      document.getElementById('temperature').textContent =
+          temp != null ? temp.toFixed(1) + '°C' : '—';
+      document.getElementById('temp-anomaly').textContent =
+          d.temp_anomaly ? '⚠ YES' : 'No';
+      document.getElementById('temp-anomaly').style.color =
+          d.temp_anomaly ? '#fc8181' : '#718096';
+
+      document.getElementById('humidity').textContent =
+          d.humidity != null ? d.humidity.toFixed(1) + '%' : '—';
+
+      const fp = Math.round((d.fire_prob || 0) * 100);
+      document.getElementById('fire-prob').textContent = fp + '%';
+      setBar('fire-bar', fp);
+
+      // Model scores
+      document.getElementById('cnn-score').textContent =
+          ((d.fire_prob || 0) * 100).toFixed(1) + '%';
+      document.getElementById('rf-score').textContent =
+          ((d.gas_risk || 0) * 100).toFixed(1) + '%';
+      document.getElementById('lstm-score').textContent =
+          d.temp_anomaly ? 'Anomaly' : 'Normal';
+      document.getElementById('fused-score').textContent =
+          ((d.risk_score || 0) * 100).toFixed(1) + '%';
+      document.getElementById('method').textContent =
+          d.method || '—';
+      document.getElementById('cycle').textContent =
+          d.cycle || '—';
+
+      document.getElementById('uptime').textContent =
+          d.uptime ? d.uptime + 's' : '—';
+    })
+    .catch(() => {});
+}
+
+function pollEvents() {
+  fetch('/events')
+    .then(r => r.json())
+    .then(events => {
+      if (!events || events.length === 0) return;
+      const tbody = document.getElementById('event-tbody');
+      tbody.innerHTML = events.map(e => {
+        const lv = e.level || '';
+        return `<tr>
+          <td>${e.time || e.timestamp || ''}</td>
+          <td class="lv-${lv}">${lv}</td>
+          <td>${(e.gas || '—').toUpperCase()}</td>
+          <td>${e.score != null ? (e.score*100).toFixed(0)+'%' : '—'}</td>
+          <td>${e.fire_prob != null ? (e.fire_prob*100).toFixed(0)+'%' : '—'}</td>
+        </tr>`;
+      }).join('');
+    })
+    .catch(() => {});
+}
+
+// Poll data every 1 second, events every 5 seconds
+setInterval(pollData,   1000);
+setInterval(pollEvents, 5000);
+pollData();
+pollEvents();
+</script>
+</body>
+</html>
