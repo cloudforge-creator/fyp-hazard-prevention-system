@@ -102,12 +102,30 @@ print(f"  Trainable params: {cnn.count_params():,}")
 
 # ---- 3. Phase 1: Train top layers (frozen base) ----
 print("\n[3/5] Phase 1: Training classification head (10 epochs)...")
-callbacks_p1 = [
-    EarlyStopping(monitor='val_accuracy', patience=5,
-                  restore_best_weights=True),
-    ModelCheckpoint('models/cnn_fire_best.h5',
-                    monitor='val_accuracy', save_best_only=True)
+class StopAtAccuracy(tf.keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs={}):
+        acc = logs.get('val_accuracy')
+        if acc is not None and acc >= 0.92:  # stop at 92% accuracy
+            print(f"\n  Target accuracy {acc:.4f} reached - stopping")
+            self.model.stop_training = True
+
+cb1 = [
+    EarlyStopping(
+        monitor='val_accuracy',
+        patience=3,
+        restore_best_weights=True,
+        verbose=1
+    ),
+    ModelCheckpoint(
+        'models/cnn_fire_model.h5',
+        monitor='val_accuracy',
+        save_best_only=True,         # saves only when accuracy improves
+        mode='max',
+        verbose=1
+    ),
+    StopAtAccuracy()                 # stops when 92% reached
 ]
+
 h1 = cnn.fit(train_data, epochs=10,
              validation_data=val_data, callbacks=callbacks_p1)
 
