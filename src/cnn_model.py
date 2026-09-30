@@ -10,7 +10,7 @@ import time
 import threading
 
 MODEL_PATH = 'models/cnn_fire_model.h5'
-IMG_SIZE   = (224, 224)
+IMG_SIZE   = (128, 128)
 
 
 class CNNModel:
