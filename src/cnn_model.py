@@ -10,7 +10,7 @@ import time
 import threading
 
 MODEL_PATH = 'models/cnn_fire_model.h5'
-IMG_SIZE   = (128, 128)
+IMG_SIZE   = (224, 224)
 
 
 class CNNModel:
@@ -33,7 +33,7 @@ class CNNModel:
             except Exception as e:
                 print(f"[CNNModel] Model load failed: {e}")
         else:
-            print("[CNNModel] No model found - run notebooks/03_train_cnn_model.ipynb")
+            print("[CNNModel] No model found - run notebooks/03_train_cnn_model.py")
 
         # Init camera
         self._init_camera()
