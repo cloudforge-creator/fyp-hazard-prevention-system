@@ -49,8 +49,18 @@ class CNNModel:
     def _init_camera(self):
         try:
             import cv2
-            self.cam = cv2.VideoCapture(0)
+            # On Windows, DirectShow is more reliable than Media Foundation
+            # for long-running OpenCV webcam capture.
+            if os.name == 'nt':
+                self.cam = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+            else:
+                self.cam = cv2.VideoCapture(0)
+
             if self.cam.isOpened():
+                try:
+                    self.cam.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                except Exception:
+                    pass
                 self.camera_active = True
                 print("[CNNModel] Camera connected")
             else:
@@ -173,13 +183,19 @@ class CNNModel:
             self._fire_prob = None
 
 
-# Singleton
+# Thread-safe singleton.
+# main.py's sensor thread and Flask's dashboard can request the CNN at the
+# same time during startup. Without a lock, both threads can create a
+# CNNModel and both cameras compete for device 0.
 _cnn_model = None
+_cnn_model_lock = threading.Lock()
 
 def get_cnn_model():
     global _cnn_model
     if _cnn_model is None:
-        _cnn_model = CNNModel()
+        with _cnn_model_lock:
+            if _cnn_model is None:
+                _cnn_model = CNNModel()
     return _cnn_model
 
 def predict_fire():
