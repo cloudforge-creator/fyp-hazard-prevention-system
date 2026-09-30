@@ -25,6 +25,8 @@ class LSTMModel:
         self.threshold    = None
         self.model        = None
         self._fill_counter = 0
+        # Keep fallback state available even when model loading fails.
+        self._temp_history = collections.deque(maxlen=200)
 
         if (os.path.exists(MODEL_PATH) and
                 os.path.exists(SCALER_PATH) and
@@ -40,9 +42,7 @@ class LSTMModel:
                 print(f"[LSTMModel] Load failed: {e} - using rule-based")
         else:
             print("[LSTMModel] No model found - using statistical anomaly detection")
-            print("[LSTMModel] Run notebooks/02_train_lstm_model.ipynb to train")
-            # Statistical fallback: maintain rolling stats
-            self._temp_history = collections.deque(maxlen=200)
+            print("[LSTMModel] Run notebooks/02_train_lstm_model.py to train")
 
     def predict(self, temperature: float):
         """
