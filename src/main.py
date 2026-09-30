@@ -38,6 +38,7 @@ def sensor_loop(arduino, engine, firebase):
     while True:
         cycle += 1
         loop_start = time.time()
+
         try:
             sensors = arduino.read_sensors()
             gas_ratio = sensors.get('gas_ratio')
@@ -51,8 +52,13 @@ def sensor_loop(arduino, engine, firebase):
                 time.sleep(0.5)
                 continue
 
-            gas_label, gas_risk = predict_gas(gas_ratio or 5.0, gas_raw or 0)
-            temp_anomaly, temp_error, temp_predicted = predict_anomaly(temp or 25.0)
+            gas_label, gas_risk = predict_gas(
+                gas_ratio or 5.0,
+                gas_raw or 0
+            )
+            temp_anomaly, temp_error, temp_predicted = predict_anomaly(
+                temp or 25.0
+            )
             fire_prob, _ = predict_fire()
 
             result = engine.evaluate(
@@ -64,7 +70,7 @@ def sensor_loop(arduino, engine, firebase):
                 flame_signal=flame
             )
 
-            update_live_data({
+            live_payload = {
                 'gas': gas_label,
                 'gas_risk': gas_risk,
                 'temperature': temp,
@@ -77,21 +83,31 @@ def sensor_loop(arduino, engine, firebase):
                 'method': result['method'],
                 'cycle': cycle,
                 'updated_at': time.strftime('%H:%M:%S')
-            })
+            }
 
+            update_live_data(live_payload)
+
+            # Firebase should receive the complete live sensor state, not only
+            # the compact DecisionEngine result.
             if cycle % 10 == 0:
-                firebase.update_live_sensors(result)
+                firebase.update_live_sensors(live_payload)
 
             if result['level'] != 'SAFE':
                 add_event(result)
 
-            level_indicator = {'SAFE': '✓', 'WARNING': '⚠', 'CRITICAL': '✗'}.get(
-                result['level'], '?')
-            print(f"[{level_indicator}] Cycle {cycle:04d} | "
-                  f"Gas:{gas_label:<12} Risk:{gas_risk:.2f} | "
-                  f"Temp:{temp or 0:.1f}°C Anom:{temp_anomaly} | "
-                  f"Fire:{fire_prob:.0%} | "
-                  f"Level:{result['level']} Score:{result['score']:.3f}")
+            level_indicator = {
+                'SAFE': '✓',
+                'WARNING': '⚠',
+                'CRITICAL': '✗'
+            }.get(result['level'], '?')
+
+            print(
+                f"[{level_indicator}] Cycle {cycle:04d} | "
+                f"Gas:{gas_label:<12} Risk:{gas_risk:.2f} | "
+                f"Temp:{temp or 0:.1f}°C Anom:{temp_anomaly} | "
+                f"Fire:{fire_prob:.0%} | "
+                f"Level:{result['level']} Score:{result['score']:.3f}"
+            )
 
         except KeyboardInterrupt:
             raise
@@ -118,16 +134,24 @@ def main():
 
     print("\n[Main] Initialising components...")
     arduino = ArduinoReader(port=args.port, simulation=sim_mode)
-    firebase = FirebaseHandler(simulation=(sim_mode or args.no_firebase))
-    engine = DecisionEngine(firebase_handler=firebase, arduino_reader=arduino)
+    firebase = FirebaseHandler(
+        simulation=(sim_mode or args.no_firebase)
+    )
+    engine = DecisionEngine(
+        firebase_handler=firebase,
+        arduino_reader=arduino
+    )
 
     print("[Main] All components initialised")
     print("[Main] Models will load on first prediction call")
     print("[Main] Starting sensor loop...")
 
     loop_thread = threading.Thread(
-        target=sensor_loop, args=(arduino, engine, firebase),
-        daemon=True, name='SensorLoop')
+        target=sensor_loop,
+        args=(arduino, engine, firebase),
+        daemon=True,
+        name='SensorLoop'
+    )
     loop_thread.start()
 
     time.sleep(1.5)
