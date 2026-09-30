@@ -18,6 +18,7 @@ serviceAccountKey.json
 
 # Dataset images - too large for GitHub
 data/fire_images/
+data/fire_dataset/
 
 # Plots
 notebooks/plots/
