@@ -11,6 +11,7 @@ import threading
 
 MODEL_PATH = 'models/cnn_fire_model.h5'
 IMG_SIZE   = (224, 224)
+FIRE_THRESHOLD = 0.50
 
 
 class CNNModel:
@@ -20,8 +21,9 @@ class CNNModel:
         self.cam            = None
         self._latest_frame  = None
         self._frame_lock    = threading.Lock()
-        self._fire_prob     = 0.0
+        self._fire_prob     = None
         self._sim_t         = 0
+        self._stop_event    = threading.Event()
 
         # Load trained model
         if os.path.exists(MODEL_PATH):
@@ -30,6 +32,7 @@ class CNNModel:
                 self.model       = load_model(MODEL_PATH)
                 self.model_loaded = True
                 print("[CNNModel] Trained model loaded")
+                print("[CNNModel] Class mapping: fire=0, no_fire=1")
             except Exception as e:
                 print(f"[CNNModel] Model load failed: {e}")
         else:
@@ -59,11 +62,14 @@ class CNNModel:
     def _capture_loop(self):
         """Background thread: captures and processes frames continuously."""
         import cv2
-        while True:
+        while not self._stop_event.is_set():
             try:
                 ret, frame = self.cam.read()
-                if not ret:
-                    time.sleep(0.5)
+                if not ret or frame is None:
+                    with self._frame_lock:
+                        self._fire_prob = None
+                        self._latest_frame = None
+                    time.sleep(0.2)
                     continue
 
                 prob, annotated = self._infer(frame)
@@ -86,11 +92,14 @@ class CNNModel:
             resized = cv2.resize(frame, IMG_SIZE)
             arr     = resized.astype('float32') / 255.0
             arr     = np.expand_dims(arr, 0)
-            prob    = float(self.model.predict(arr, verbose=0)[0][0])
+            no_fire_prob = float(self.model.predict(arr, verbose=0)[0][0])
+            no_fire_prob = max(0.0, min(1.0, no_fire_prob))
+            # Training uses fire=0 and no_fire=1, so sigmoid output is no-fire probability.
+            prob = 1.0 - no_fire_prob
 
         # Annotate frame
-        color = (0, 0, 200) if prob > 0.5 else (0, 200, 0)
-        label = f"FIRE {prob:.0%}" if prob > 0.5 else f"Safe {(1-prob):.0%}"
+        color = (0, 0, 200) if prob >= FIRE_THRESHOLD else (0, 200, 0)
+        label = f"FIRE {prob:.0%}" if prob >= FIRE_THRESHOLD else f"SAFE {(1-prob):.0%}"
         import cv2
         cv2.putText(frame, label, (10, 35),
                     cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 2)
@@ -124,7 +133,13 @@ class CNNModel:
             return self._simulate(), None
 
         with self._frame_lock:
-            return self._fire_prob, self._latest_frame
+            probability = self._fire_prob
+            frame = self._latest_frame
+
+        if probability is None:
+            return 0.0, None
+
+        return probability, frame
 
     def get_jpeg_frame(self):
         """Return latest frame as JPEG bytes for dashboard streaming."""
@@ -145,8 +160,17 @@ class CNNModel:
         return round(max(0, min(1, base)), 3)
 
     def release(self):
+        self._stop_event.set()
+        self.camera_active = False
         if self.cam:
-            self.cam.release()
+            try:
+                self.cam.release()
+            except Exception:
+                pass
+            self.cam = None
+        with self._frame_lock:
+            self._latest_frame = None
+            self._fire_prob = None
 
 
 # Singleton
