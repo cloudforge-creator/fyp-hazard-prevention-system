@@ -17,6 +17,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import classification_report, confusion_matrix
 import seaborn as sns
+import tensorflow as tf
 
 os.makedirs('models', exist_ok=True)
 os.makedirs('notebooks/plots', exist_ok=True)
@@ -127,7 +128,7 @@ cb1 = [
 ]
 
 h1 = cnn.fit(train_data, epochs=10,
-             validation_data=val_data, callbacks=callbacks_p1)
+             validation_data=val_data, callbacks=cb1)
 
 # ---- 4. Phase 2: Fine-tune top layers of MobileNetV2 ----
 print("\n[4/5] Phase 2: Fine-tuning top 20 MobileNetV2 layers...")
