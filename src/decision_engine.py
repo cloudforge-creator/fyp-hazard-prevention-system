@@ -34,6 +34,20 @@ class DecisionEngine:
                  fire_prob: float, flame_signal: int) -> dict:
         self._cycle_count += 1
 
+        # Once a critical hazard has activated the safety response, keep the
+        # decision CRITICAL until the operator explicitly resets the relay.
+        # This prevents the dashboard from showing SAFE/WARNING while the
+        # machine remains in a latched safety shutdown state.
+        with self._lock:
+            critical_latched = self._critical_active
+
+        if critical_latched:
+            return self._build_result(
+                'CRITICAL', 1.0, 'critical_latched',
+                gas_label, fire_prob,
+                temp_anomaly, temp_error
+            )
+
         # Safety override: confirmed fire or hardware flame sensor bypasses
         # weighted fusion completely.
         if flame_signal == FLAME_OVERRIDE_SIGNAL or fire_prob >= FIRE_OVERRIDE_PROB:
