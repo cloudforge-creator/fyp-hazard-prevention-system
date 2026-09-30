@@ -173,12 +173,13 @@ class CNNModel:
     def _infer(self, frame):
         import cv2
 
+        roi, roi_box = self._center_crop(frame)
+
         if self.model_loaded:
             full_prob = self._model_fire_probability(frame)
 
             # A flame can be small in the complete webcam image. Evaluate the
             # central region separately so resizing does not erase its features.
-            roi, roi_box = self._center_crop(frame)
             roi_prob = self._model_fire_probability(roi)
 
             cnn_prob = max(full_prob, roi_prob)
