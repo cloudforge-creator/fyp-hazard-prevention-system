@@ -8,6 +8,9 @@ WEIGHTS = {'cnn': 0.50, 'rf': 0.35, 'lstm': 0.15}
 THRESHOLD_WARNING = 0.35
 THRESHOLD_CRITICAL = 0.65
 HIGH_RISK_GASES = {'lpg', 'methane', 'hydrogen', 'co', 'high_conc_gas'}
+
+# A confirmed CNN/visual fire signal at or above this value immediately
+# becomes CRITICAL and bypasses weighted fusion.
 FIRE_OVERRIDE_PROB = 0.80
 FLAME_OVERRIDE_SIGNAL = 1
 
@@ -31,11 +34,15 @@ class DecisionEngine:
                  fire_prob: float, flame_signal: int) -> dict:
         self._cycle_count += 1
 
+        # Safety override: confirmed fire or hardware flame sensor bypasses
+        # weighted fusion completely.
         if flame_signal == FLAME_OVERRIDE_SIGNAL or fire_prob >= FIRE_OVERRIDE_PROB:
             reason = 'flame_sensor' if flame_signal == 1 else 'cnn_override'
-            result = self._build_result('CRITICAL', 1.0, reason,
-                                         gas_label, fire_prob,
-                                         temp_anomaly, temp_error)
+            result = self._build_result(
+                'CRITICAL', 1.0, reason,
+                gas_label, fire_prob,
+                temp_anomaly, temp_error
+            )
             self._respond(result)
             return result
 
@@ -45,28 +52,39 @@ class DecisionEngine:
             gas_score = gas_risk
 
         temp_score = min(1.0, temp_error * 2.0) if temp_anomaly else 0.0
+
         fused = round(min(1.0,
             fire_prob * WEIGHTS['cnn'] +
             gas_score * WEIGHTS['rf'] +
-            temp_score * WEIGHTS['lstm']), 4)
+            temp_score * WEIGHTS['lstm']
+        ), 4)
 
-        level = ('SAFE' if fused < THRESHOLD_WARNING else
-                 'WARNING' if fused < THRESHOLD_CRITICAL else 'CRITICAL')
+        level = (
+            'SAFE' if fused < THRESHOLD_WARNING else
+            'WARNING' if fused < THRESHOLD_CRITICAL else
+            'CRITICAL'
+        )
 
-        result = self._build_result(level, fused, 'weighted_fusion',
-                                     gas_label, fire_prob,
-                                     temp_anomaly, temp_error)
+        result = self._build_result(
+            level, fused, 'weighted_fusion',
+            gas_label, fire_prob,
+            temp_anomaly, temp_error
+        )
         self._respond(result)
         return result
 
     def _build_result(self, level, score, method, gas_label,
                       fire_prob, temp_anomaly, temp_error):
         return {
-            'level': level, 'score': score, 'method': method,
-            'gas': gas_label, 'fire_prob': round(fire_prob, 3),
+            'level': level,
+            'score': score,
+            'method': method,
+            'gas': gas_label,
+            'fire_prob': round(fire_prob, 3),
             'temp_anomaly': bool(temp_anomaly),
             'temp_error': round(temp_error, 4),
-            'timestamp': time.time(), 'cycle': self._cycle_count
+            'timestamp': time.time(),
+            'cycle': self._cycle_count
         }
 
     def _respond(self, result):
@@ -74,44 +92,73 @@ class DecisionEngine:
 
         if level == 'CRITICAL':
             first_critical = False
+
             with self._lock:
                 if not self._critical_active:
                     self._critical_active = True
                     first_critical = True
+                self._current_level = 'CRITICAL'
 
-            print(f"[ENGINE] *** CRITICAL *** score={result['score']:.2f} "
-                  f"gas={result['gas']} fire={result['fire_prob']:.0%}")
+            print(
+                f"[ENGINE] *** CRITICAL *** "
+                f"score={result['score']:.2f} "
+                f"gas={result['gas']} "
+                f"fire={result['fire_prob']:.0%}"
+            )
 
-            # Keep relay asserted; only issue the physical command once.
             if first_critical and self.arduino:
                 self.arduino.activate_relay()
 
-            # Avoid sending duplicate push notifications/events every 500 ms.
             if first_critical and self.firebase:
                 self.firebase.send_alert(result)
                 self.firebase.log_event(result)
 
         elif level == 'WARNING':
             now = time.time()
-            print(f"[ENGINE] WARNING score={result['score']:.2f} gas={result['gas']}")
-            with self._lock:
-                if now - self._last_warning_time > self._warning_cooldown:
-                    self._last_warning_time = now
-                    if self.firebase:
-                        self.firebase.send_alert(result)
-                        self.firebase.log_event(result)
 
-        elif self._cycle_count % 60 == 0 and self.firebase:
-            self.firebase.update_live_sensors(result)
+            with self._lock:
+                # If a critical incident is latched, do not downgrade the
+                # system status until the operator explicitly resets it.
+                critical_latched = self._critical_active
+                if not critical_latched:
+                    self._current_level = 'WARNING'
+
+            print(
+                f"[ENGINE] WARNING "
+                f"score={result['score']:.2f} gas={result['gas']}"
+            )
+
+            if not critical_latched:
+                with self._lock:
+                    should_alert = (
+                        now - self._last_warning_time > self._warning_cooldown
+                    )
+                    if should_alert:
+                        self._last_warning_time = now
+
+                if should_alert and self.firebase:
+                    self.firebase.send_alert(result)
+                    self.firebase.log_event(result)
+
+        else:
+            with self._lock:
+                if not self._critical_active:
+                    self._current_level = 'SAFE'
+
+            if self._cycle_count % 60 == 0 and self.firebase:
+                self.firebase.update_live_sensors(result)
 
     def get_status(self):
-        return self._current_level
+        with self._lock:
+            return self._current_level
 
     def reset_relay(self):
         """Restore power after the hazard has been cleared."""
         if self.arduino:
             self.arduino.deactivate_relay()
+
         with self._lock:
             self._critical_active = False
             self._current_level = 'SAFE'
+
         print("[ENGINE] Relay reset - machine power restored")
