@@ -84,7 +84,8 @@ class DecisionEngine:
                 gas_label=gas_label,
                 fire_prob=fire_prob,
                 temp_anomaly=temp_anomaly,
-                temp_error=temp_error
+                temp_error=temp_error,
+                gas_risk=gas_risk
             )
 
         # ---- WEIGHTED FUSION ----
@@ -133,7 +134,8 @@ class DecisionEngine:
             gas_label=gas_label,
             fire_prob=fire_prob,
             temp_anomaly=temp_anomaly,
-            temp_error=temp_error
+            temp_error=temp_error,
+            gas_risk=gas_risk
         )
         result.update({
             'predicted_level': predicted_level,
@@ -152,13 +154,13 @@ class DecisionEngine:
         return result
 
     def _build_result(self, level, score, method,
-                      gas_label, fire_prob, temp_anomaly, temp_error):
+                      gas_label, fire_prob, temp_anomaly, temp_error, gas_risk=0.0):
         result = {
             'level':       level,
             'score':       score,
             'method':      method,
             'gas':         gas_label,
-            'gas_risk':    round(gas_risk, 4) if 'gas_risk' in locals() else 0.0,
+            'gas_risk':    round(gas_risk, 4),
             'fire_prob':   round(fire_prob, 3),
             'temp_anomaly':temp_anomaly,
             'temp_error':  round(temp_error, 4),
