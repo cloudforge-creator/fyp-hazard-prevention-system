@@ -158,6 +158,7 @@ class DecisionEngine:
             'score':       score,
             'method':      method,
             'gas':         gas_label,
+            'gas_risk':    round(gas_risk, 4) if 'gas_risk' in locals() else 0.0,
             'fire_prob':   round(fire_prob, 3),
             'temp_anomaly':temp_anomaly,
             'temp_error':  round(temp_error, 4),
