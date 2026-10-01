@@ -107,6 +107,13 @@ def sensor_loop(arduino: ArduinoReader,
                 'temp_error':  temp_error,
                 'risk_level':  result['level'],
                 'risk_score':  result['score'],
+                'predicted_level': result.get('predicted_level', result['level']),
+                'predicted_score': result.get('predicted_score', result['score']),
+                'prediction_confidence': result.get('prediction_confidence', 0.0),
+                'prediction_trend': result.get('prediction_trend', 'N/A'),
+                'early_warning': result.get('early_warning', False),
+                'forecast_horizon_seconds': result.get('forecast_horizon_seconds', 30),
+                'response_level': result.get('response_level', result['level']),
                 'method':      result['method'],
                 'cycle':       cycle,
                 'updated_at':  time.strftime('%H:%M:%S')
@@ -132,7 +139,10 @@ def sensor_loop(arduino: ArduinoReader,
                   f"Gas:{gas_label:<12} Risk:{gas_risk:.2f} | "
                   f"Temp:{temp or 0:.1f}°C Anom:{temp_anomaly} | "
                   f"Fire:{fire_prob:.0%} | "
-                  f"Level:{result['level']} Score:{result['score']:.3f}")
+                  f"Level:{result['level']} Score:{result['score']:.3f} | "
+                f"Pred:{result.get('predicted_level', result['level'])} "
+                f"PredScore:{result.get('predicted_score', result['score']):.3f} "
+                f"Trend:{result.get('prediction_trend', 'N/A')}")
 
         except KeyboardInterrupt:
             raise
