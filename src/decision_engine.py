@@ -80,7 +80,7 @@ class DecisionEngine:
         # Physical flame sensor triggered OR CNN very confident
         if flame_signal == FLAME_OVERRIDE_SIGNAL or fire_prob >= FIRE_OVERRIDE_PROB:
             reason = 'flame_sensor' if flame_signal == 1 else 'cnn_override'
-            return self._build_result(
+            result = self._build_result(
                 level='CRITICAL',
                 score=1.0,
                 method=reason,
@@ -91,7 +91,6 @@ class DecisionEngine:
                 gas_risk=gas_risk,
                 current_people=current_people or []
             )
-            result = dict(result)
             result['response_level'] = 'CRITICAL'
             self._respond(result)
             return result
