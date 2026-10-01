@@ -133,7 +133,7 @@ def sensor_loop(arduino: ArduinoReader,
 
             # Update Firebase live sensors every 10 cycles (~5 seconds)
             if cycle % 10 == 0:
-                firebase.update_live_sensors(result)
+                firebase.update_live_sensors(live)
 
             # Log event to dashboard history if not safe
             if result['level'] != 'SAFE':
