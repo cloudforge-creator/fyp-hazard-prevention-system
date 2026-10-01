@@ -91,6 +91,12 @@
     <div class="card-sub">%RH</div>
   </div>
   <div class="card">
+    <div class="card-label">Predicted hazard risk (30s)</div>
+    <div class="card-value" id="predicted-level" style="font-size:1.4rem">SAFE</div>
+    <div class="card-sub">Score: <span id="predicted-score">0%</span> · Trend: <span id="prediction-trend">—</span></div>
+    <div class="bar-wrap"><div class="bar green" id="predicted-bar" style="width:0%"></div></div>
+  </div>
+  <div class="card">
     <div class="card-label">Fire probability (CNN)</div>
     <div class="card-value" id="fire-prob">0%</div>
     <div class="bar-wrap"><div class="bar green" id="fire-bar" style="width:0%"></div></div>
@@ -127,6 +133,18 @@
       <div class="score-row">
         <div class="score-label">Fused score</div>
         <div class="score-val" id="fused-score">—</div>
+      </div>
+      <div class="score-row">
+        <div class="score-label">Predicted hazard level</div>
+        <div class="score-val" id="predicted-level-detail">—</div>
+      </div>
+      <div class="score-row">
+        <div class="score-label">Prediction confidence</div>
+        <div class="score-val" id="prediction-confidence">—</div>
+      </div>
+      <div class="score-row">
+        <div class="score-label">Early warning</div>
+        <div class="score-val" id="early-warning">No</div>
       </div>
       <div class="score-row">
         <div class="score-label">Decision method</div>
@@ -207,6 +225,26 @@ function pollData() {
       const fp = Math.round((d.fire_prob || 0) * 100);
       document.getElementById('fire-prob').textContent = fp + '%';
       setBar('fire-bar', fp);
+
+      const predicted = d.predicted_score || 0;
+      const predictedPct = Math.round(predicted * 100);
+      document.getElementById('predicted-level').textContent =
+          d.predicted_level || 'SAFE';
+      document.getElementById('predicted-level').style.color =
+          d.predicted_level === 'CRITICAL' ? '#fc8181' :
+          d.predicted_level === 'WARNING' ? '#f6ad55' : '#48bb78';
+      document.getElementById('predicted-score').textContent = predictedPct + '%';
+      document.getElementById('prediction-trend').textContent =
+          d.prediction_trend || '—';
+      setBar('predicted-bar', predictedPct);
+      document.getElementById('predicted-level-detail').textContent =
+          d.predicted_level || 'SAFE';
+      document.getElementById('prediction-confidence').textContent =
+          Math.round((d.prediction_confidence || 0) * 100) + '%';
+      document.getElementById('early-warning').textContent =
+          d.early_warning ? '⚠ YES' : 'No';
+      document.getElementById('early-warning').style.color =
+          d.early_warning ? '#f6ad55' : '#718096';
 
       // Model scores
       document.getElementById('cnn-score').textContent =
