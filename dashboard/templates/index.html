@@ -116,6 +116,23 @@
   </div>
 
   <div class="card">
+    <div class="section-title">People currently visible to camera</div>
+    <div id="current-people" style="min-height:80px;color:#718096">No recognized/visible person</div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Register a person</div>
+    <form id="person-form" enctype="multipart/form-data">
+      <input name="person_id" placeholder="Person ID (e.g. EMP001)" required style="width:100%;margin-bottom:8px;padding:8px;background:#0f1117;color:#fff;border:1px solid #2d3142;border-radius:6px">
+      <input name="name" placeholder="Full name" required style="width:100%;margin-bottom:8px;padding:8px;background:#0f1117;color:#fff;border:1px solid #2d3142;border-radius:6px">
+      <input name="designation" placeholder="Designation" required style="width:100%;margin-bottom:8px;padding:8px;background:#0f1117;color:#fff;border:1px solid #2d3142;border-radius:6px">
+      <input name="images" type="file" accept="image/*" multiple required style="width:100%;margin-bottom:8px;color:#a0aec0">
+      <button type="submit" style="padding:8px 14px;border:0;border-radius:6px;cursor:pointer">Register person</button>
+      <div id="person-form-status" style="margin-top:8px;color:#718096"></div>
+    </form>
+  </div>
+
+  <div class="card">
     <div class="section-title">Model scores this cycle</div>
     <div id="model-scores">
       <div class="score-row">
@@ -164,11 +181,11 @@
         <thead>
           <tr>
             <th>Time</th><th>Level</th><th>Gas</th>
-            <th>Risk score</th><th>Fire prob</th>
+            <th>Risk score</th><th>Fire prob</th><th>People present</th>
           </tr>
         </thead>
         <tbody id="event-tbody">
-          <tr><td colspan="5" style="color:#4a5568;text-align:center;padding:20px">
+          <tr><td colspan="6" style="color:#4a5568;text-align:center;padding:20px">
             No events yet — system monitoring...
           </td></tr>
         </tbody>
@@ -195,6 +212,21 @@ function setBar(id, pct) {
   const el = document.getElementById(id);
   el.style.width = Math.min(100, pct) + '%';
   el.className = 'bar ' + colorClass(pct);
+}
+
+function renderPeople(people) {
+  const el = document.getElementById('current-people');
+  if (!people || people.length === 0) {
+    el.innerHTML = '<span style="color:#4a5568">No recognized/visible person</span>';
+    return;
+  }
+  el.innerHTML = people.map(function(p) {
+    const score = p.match_score ? ' · Match ' + Math.round(p.match_score*100) + '%' : '';
+    return '<div style="padding:8px 0;border-bottom:1px solid #2d3142">' +
+           '<strong style="color:#fff">' + (p.name || 'Unknown') + '</strong><br>' +
+           '<span style="font-size:12px;color:#718096">' +
+           (p.designation || 'Unregistered') + score + '</span></div>';
+  }).join('');
 }
 
 function pollData() {
@@ -260,6 +292,8 @@ function pollData() {
       document.getElementById('cycle').textContent =
           d.cycle || '—';
 
+      renderPeople(d.current_people || []);
+
       document.getElementById('uptime').textContent =
           d.uptime ? d.uptime + 's' : '—';
     })
@@ -280,11 +314,26 @@ function pollEvents() {
           <td>${(e.gas || '—').toUpperCase()}</td>
           <td>${e.score != null ? (e.score*100).toFixed(0)+'%' : '—'}</td>
           <td>${e.fire_prob != null ? (e.fire_prob*100).toFixed(0)+'%' : '—'}</td>
+          <td>${(e.people || []).map(function(p){return p.name || 'Unknown';}).join(', ') || 'None recorded'}</td>
         </tr>`;
       }).join('');
     })
     .catch(() => {});
 }
+
+document.getElementById('person-form').addEventListener('submit', function(ev) {
+  ev.preventDefault();
+  const form = ev.target;
+  const status = document.getElementById('person-form-status');
+  status.textContent = 'Registering...';
+  fetch('/persons/register', { method:'POST', body:new FormData(form) })
+    .then(function(r){ return r.json().then(function(data){ return {ok:r.ok,data:data}; }); })
+    .then(function(result) {
+      status.textContent = result.ok ? 'Registered successfully: ' + result.data.person.name : 'Error: ' + result.data.error;
+      if (result.ok) form.reset();
+    })
+    .catch(function(){ status.textContent = 'Registration request failed'; });
+});
 
 // Poll data every 1 second, events every 5 seconds
 setInterval(pollData,   1000);
