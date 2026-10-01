@@ -41,6 +41,11 @@ class CNNModel:
         # Keep recent visual-fire scores so one noisy frame cannot trigger an alert.
         self._visual_history = deque(maxlen=VISUAL_WINDOW)
 
+        # Real-time person recognition and presence tracking.
+        from src.person_recognition import PersonRecognizer
+        self.person_recognizer = PersonRecognizer()
+        self._current_persons = []
+
         if os.path.exists(MODEL_PATH):
             try:
                 from tensorflow.keras.models import load_model
@@ -100,10 +105,12 @@ class CNNModel:
                     continue
 
                 prob, annotated = self._infer(frame)
+                annotated, persons = self.person_recognizer.annotate_frame(annotated)
 
                 with self._frame_lock:
                     self._latest_frame = annotated
                     self._fire_prob = prob
+                    self._current_persons = persons
 
             except Exception as e:
                 print(f"[CNNModel] Capture error: {e}")
@@ -250,6 +257,17 @@ class CNNModel:
 
         return probability, frame
 
+    def get_current_persons(self):
+        return self.person_recognizer.get_current_presence()
+
+    def register_person(self, person_id, name, designation, images):
+        return self.person_recognizer.register_person(
+            person_id, name, designation, images
+        )
+
+    def get_registered_people(self):
+        return self.person_recognizer.get_people()
+
     def get_jpeg_frame(self):
         import cv2
 
@@ -286,6 +304,7 @@ class CNNModel:
         with self._frame_lock:
             self._latest_frame = None
             self._fire_prob = None
+            self._current_persons = []
 
 
 _cnn_model = None
@@ -309,3 +328,15 @@ def predict_fire():
 
 def get_jpeg_frame():
     return get_cnn_model().get_jpeg_frame()
+
+
+def get_current_persons():
+    return get_cnn_model().get_current_persons()
+
+
+def register_person(person_id, name, designation, images):
+    return get_cnn_model().register_person(person_id, name, designation, images)
+
+
+def get_registered_people():
+    return get_cnn_model().get_registered_people()

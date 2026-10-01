@@ -18,7 +18,6 @@ serviceAccountKey.json
 
 # Dataset images - too large for GitHub
 data/fire_images/
-data/fire_dataset/
 
 # Plots
 notebooks/plots/
@@ -26,3 +25,7 @@ notebooks/plots/
 # OS files
 .DS_Store
 Thumbs.db
+# Local biometric enrollment data - do not commit
+data/person_faces/
+data/persons.json
+data/person_lbph.yml

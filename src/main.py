@@ -1,6 +1,12 @@
 """
 main.py
 Entry point for the entire Predictive AI Hazard Prevention System.
+Run this file: python src/main.py
+
+Modes:
+  python src/main.py              -> auto-detect hardware
+  python src/main.py --sim        -> full simulation (no hardware needed)
+  python src/main.py --port COM4  -> specify Arduino port manually
 """
 import sys
 import os
@@ -8,21 +14,25 @@ import threading
 import time
 import argparse
 
+# Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.arduino_reader import ArduinoReader
-from src.gas_model import predict_gas
-from src.lstm_model import predict_anomaly
-from src.cnn_model import predict_fire, get_jpeg_frame
+from src.arduino_reader  import ArduinoReader
+from src.gas_model       import predict_gas
+from src.lstm_model      import predict_anomaly
+from src.cnn_model       import predict_fire, get_jpeg_frame, get_current_persons, get_cnn_model
 from src.decision_engine import DecisionEngine
+from src.predictive_logger import PredictiveDataLogger
 from src.firebase_handler import FirebaseHandler
-from dashboard.app import run_dashboard, update_live_data, add_event
+from dashboard.app       import (run_dashboard, update_live_data,
+                                  add_event)
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description='FYP Hazard Prevention System')
-    parser.add_argument('--sim', action='store_true', help='Run in simulation mode')
-    parser.add_argument('--port', type=str, default=None,
+    parser.add_argument('--sim',    action='store_true',
+                        help='Run in simulation mode (no hardware)')
+    parser.add_argument('--port',   type=str, default=None,
                         help='Arduino serial port (e.g. COM4 or /dev/ttyUSB0)')
     parser.add_argument('--no-firebase', action='store_true',
                         help='Disable Firebase (simulation only)')
@@ -31,83 +41,120 @@ def parse_args():
     return parser.parse_args()
 
 
-def sensor_loop(arduino, engine, firebase):
+def sensor_loop(arduino: ArduinoReader,
+                engine:  DecisionEngine,
+                firebase: FirebaseHandler):
+    """
+    Main continuous loop:
+    1. Read sensors from Arduino (or simulation)
+    2. Run all three AI models
+    3. Pass outputs to Decision Engine
+    4. Update dashboard live data
+    5. Sleep 500ms and repeat
+    """
     print("[Main] Sensor loop started")
     cycle = 0
+    data_logger = PredictiveDataLogger()
 
     while True:
         cycle += 1
         loop_start = time.time()
 
         try:
+            # ---- Step 1: Read Hardware ----
             sensors = arduino.read_sensors()
-            gas_ratio = sensors.get('gas_ratio')
-            gas_raw = sensors.get('gas_raw', 0)
-            temp = sensors.get('temp')
-            humidity = sensors.get('humidity')
-            flame = sensors.get('flame', 0)
 
+            gas_ratio = sensors.get('gas_ratio')
+            gas_raw   = sensors.get('gas_raw', 0)
+            temp      = sensors.get('temp')
+            humidity  = sensors.get('humidity')
+            flame     = sensors.get('flame', 0)
+
+            # Skip cycle if critical readings are missing
             if gas_ratio is None and temp is None:
                 print(f"[Main] Cycle {cycle}: No sensor data - skipping")
                 time.sleep(0.5)
                 continue
 
+            # ---- Step 2: Run Three AI Models ----
+            # Model 1: Random Forest gas classification
             gas_label, gas_risk = predict_gas(
-                gas_ratio or 5.0,
-                gas_raw or 0
-            )
+                gas_ratio or 5.0, gas_raw or 0)
+
+            # Model 2: LSTM temperature anomaly
             temp_anomaly, temp_error, temp_predicted = predict_anomaly(
-                temp or 25.0
-            )
+                temp or 25.0)
+
+            # Model 3: CNN fire detection
             fire_prob, _ = predict_fire()
+            current_people = get_current_persons()
 
+            # ---- Step 3: Decision Engine fusion ----
             result = engine.evaluate(
-                gas_label=gas_label,
-                gas_risk=gas_risk,
-                temp_anomaly=temp_anomaly,
-                temp_error=temp_error,
-                fire_prob=fire_prob,
-                flame_signal=flame
+                gas_label    = gas_label,
+                gas_risk     = gas_risk,
+                temp_anomaly = temp_anomaly,
+                temp_error   = temp_error,
+                fire_prob    = fire_prob,
+                flame_signal = flame,
+                gas_raw      = gas_raw,
+                temperature  = temp or 25.0,
+                current_people = current_people
             )
 
-            live_payload = {
-                'gas': gas_label,
-                'gas_risk': gas_risk,
+            # ---- Step 4: Update dashboard live data ----
+            live = {
+                'gas':         gas_label,
+                'gas_risk':    gas_risk,
                 'temperature': temp,
-                'humidity': humidity,
-                'fire_prob': fire_prob,
-                'temp_anomaly': temp_anomaly,
-                'temp_error': temp_error,
-                'risk_level': result['level'],
-                'risk_score': result['score'],
-                'method': result['method'],
-                'cycle': cycle,
-                'updated_at': time.strftime('%H:%M:%S')
+                'humidity':    humidity,
+                'fire_prob':   fire_prob,
+                'temp_anomaly':temp_anomaly,
+                'temp_error':  temp_error,
+                'risk_level':  result['level'],
+                'risk_score':  result['score'],
+                'predicted_level': result.get('predicted_level', result['level']),
+                'predicted_score': result.get('predicted_score', result['score']),
+                'prediction_confidence': result.get('prediction_confidence', 0.0),
+                'prediction_trend': result.get('prediction_trend', 'N/A'),
+                'early_warning': result.get('early_warning', False),
+                'forecast_horizon_seconds': result.get('forecast_horizon_seconds', 30),
+                'response_level': result.get('response_level', result['level']),
+                'current_people': result.get('current_people', current_people),
+                'method':      result['method'],
+                'cycle':       cycle,
+                'updated_at':  time.strftime('%H:%M:%S')
             }
+            update_live_data(live)
+            data_logger.log(sensors, result)
 
-            update_live_data(live_payload)
+            # Persist the current people visible to the camera separately from hazard events.
+            if cycle % 2 == 0:
+                firebase.update_live_presence(current_people)
 
-            # Firebase should receive the complete live sensor state, not only
-            # the compact DecisionEngine result.
+            # Update Firebase live sensors every 10 cycles (~5 seconds)
             if cycle % 10 == 0:
-                firebase.update_live_sensors(live_payload)
+                firebase.update_live_sensors(live)
 
+            # Log event to dashboard history if not safe
             if result['level'] != 'SAFE':
                 add_event(result)
 
+            # Console output every cycle
             level_indicator = {
-                'SAFE': '✓',
-                'WARNING': '⚠',
+                'SAFE':     '✓',
+                'WARNING':  '⚠',
                 'CRITICAL': '✗'
             }.get(result['level'], '?')
 
-            print(
-                f"[{level_indicator}] Cycle {cycle:04d} | "
-                f"Gas:{gas_label:<12} Risk:{gas_risk:.2f} | "
-                f"Temp:{temp or 0:.1f}°C Anom:{temp_anomaly} | "
-                f"Fire:{fire_prob:.0%} | "
-                f"Level:{result['level']} Score:{result['score']:.3f}"
-            )
+            print(f"[{level_indicator}] Cycle {cycle:04d} | "
+                  f"Gas:{gas_label:<12} Risk:{gas_risk:.2f} | "
+                  f"Temp:{temp or 0:.1f}°C Anom:{temp_anomaly} | "
+                  f"Fire:{fire_prob:.0%} | "
+                  f"Level:{result['level']} Score:{result['score']:.3f} | "
+                f"Pred:{result.get('predicted_level', result['level'])} "
+                f"PredScore:{result.get('predicted_score', result['score']):.3f} "
+                f"Trend:{result.get('prediction_trend', 'N/A')}")
 
         except KeyboardInterrupt:
             raise
@@ -116,8 +163,10 @@ def sensor_loop(arduino, engine, firebase):
             import traceback
             traceback.print_exc()
 
+        # Maintain 500ms cycle time regardless of processing duration
         elapsed = time.time() - loop_start
-        time.sleep(max(0, 0.5 - elapsed))
+        sleep_time = max(0, 0.5 - elapsed)
+        time.sleep(sleep_time)
 
 
 def main():
@@ -132,20 +181,19 @@ def main():
     print(f"  Dashboard: http://localhost:{args.web_port}")
     print("=" * 60)
 
+    # ---- Initialise all components ----
     print("\n[Main] Initialising components...")
-    arduino = ArduinoReader(port=args.port, simulation=sim_mode)
-    firebase = FirebaseHandler(
-        simulation=(sim_mode or args.no_firebase)
-    )
-    engine = DecisionEngine(
-        firebase_handler=firebase,
-        arduino_reader=arduino
-    )
+
+    arduino  = ArduinoReader(port=args.port, simulation=sim_mode)
+    firebase = FirebaseHandler(simulation=(sim_mode or args.no_firebase))
+    engine   = DecisionEngine(firebase_handler=firebase,
+                               arduino_reader=arduino)
 
     print("[Main] All components initialised")
     print("[Main] Models will load on first prediction call")
-    print("[Main] Starting sensor loop...")
+    print(f"[Main] Starting sensor loop...")
 
+    # ---- Run sensor loop in background thread ----
     loop_thread = threading.Thread(
         target=sensor_loop,
         args=(arduino, engine, firebase),
@@ -154,18 +202,23 @@ def main():
     )
     loop_thread.start()
 
+    # Wait for first cycle before starting dashboard
     time.sleep(1.5)
 
+    # ---- Run Flask dashboard on main thread ----
+    # (must be main thread for signal handling)
     try:
         run_dashboard(
             get_jpeg_fn=get_jpeg_frame,
             firebase=firebase,
-            reset_relay_fn=engine.reset_relay,
-            port=args.web_port
+            port=args.web_port,
+            decision_engine=engine,
+            register_person_fn=get_cnn_model().register_person,
+            get_people_fn=get_cnn_model().get_registered_people
         )
     except KeyboardInterrupt:
         print("\n[Main] Shutting down...")
-        arduino.deactivate_relay()
+        arduino.deactivate_relay()  # safety: turn off relay on exit
         arduino.close()
         print("[Main] System stopped safely")
 
