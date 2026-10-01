@@ -22,6 +22,9 @@ class CNNModel:
         self._frame_lock    = threading.Lock()
         self._fire_prob     = 0.0
         self._sim_t         = 0
+        from src.person_recognition import PersonRecognizer
+        self.person_recognizer = PersonRecognizer()
+        self._current_persons = []
 
         # Load trained model
         if os.path.exists(MODEL_PATH):
@@ -67,10 +70,12 @@ class CNNModel:
                     continue
 
                 prob, annotated = self._infer(frame)
+                annotated, persons = self.person_recognizer.annotate_frame(annotated)
 
                 with self._frame_lock:
                     self._latest_frame = annotated
                     self._fire_prob    = prob
+                    self._current_persons = persons
 
             except Exception as e:
                 print(f"[CNNModel] Capture error: {e}")
@@ -126,6 +131,17 @@ class CNNModel:
         with self._frame_lock:
             return self._fire_prob, self._latest_frame
 
+    def get_current_persons(self):
+        return self.person_recognizer.get_current_presence()
+
+    def register_person(self, person_id, name, designation, images):
+        return self.person_recognizer.register_person(
+            person_id, name, designation, images
+        )
+
+    def get_registered_people(self):
+        return self.person_recognizer.get_people()
+
     def get_jpeg_frame(self):
         """Return latest frame as JPEG bytes for dashboard streaming."""
         import cv2
@@ -163,3 +179,12 @@ def predict_fire():
 
 def get_jpeg_frame():
     return get_cnn_model().get_jpeg_frame()
+
+def get_current_persons():
+    return get_cnn_model().get_current_persons()
+
+def register_person(person_id, name, designation, images):
+    return get_cnn_model().register_person(person_id, name, designation, images)
+
+def get_registered_people():
+    return get_cnn_model().get_registered_people()
