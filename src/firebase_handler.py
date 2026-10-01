@@ -178,7 +178,8 @@ class FirebaseHandler:
             print(f"  Title: {result['level']} HAZARD DETECTED")
             print(f"  Body:  Gas={result['gas']} | "
                   f"Risk={result['score']:.0%} | "
-                  f"Fire={result['fire_prob']:.0%}")
+                  f"Fire={result['fire_prob']:.0%} | " +
+                                      f"People={len(result.get('current_people', []))}")
             return
 
         token = self._get_device_token()
@@ -222,7 +223,8 @@ class FirebaseHandler:
                             alert=messaging.ApsAlert(
                                 title=f"{result['level']} HAZARD",
                                 body=(f"Gas: {result['gas']} | "
-                                      f"Risk: {result['score']:.0%}")
+                                      f"Risk: {result['score']:.0%} | " +
+                                      f"People={len(result.get('current_people', []))}")
                             ),
                             sound='default',
                             badge=1,
