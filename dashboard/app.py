@@ -27,7 +27,8 @@ _live_data = {
     'risk_score':  0.0,
     'cycle':       0,
     'uptime':      0,
-    'updated_at':  ''
+    'updated_at':  '',
+    'current_people': []
 }
 _data_lock     = threading.Lock()
 _event_history = []   # local event log (last 50)
@@ -37,6 +38,9 @@ _start_time    = time.time()
 # Injected by main.py
 _get_jpeg_frame = None
 _firebase       = None
+_decision_engine = None
+_register_person = None
+_get_people      = None
 
 
 def update_live_data(data: dict):
@@ -55,6 +59,8 @@ def add_event(result: dict):
             'gas':   result.get('gas', ''),
             'score': result.get('score', 0),
             'fire':  result.get('fire_prob', 0),
+            'people': result.get('current_people', []),
+            'predicted_level': result.get('predicted_level', result.get('level', '')),
         })
         if len(_event_history) > 50:
             _event_history.pop()
@@ -96,17 +102,54 @@ def video_feed():
 @app.route('/reset_relay', methods=['POST'])
 def reset_relay():
     """Manual relay reset from dashboard."""
-    # Imported here to avoid circular import
-    from src.arduino_reader import ArduinoReader
-    # Signal main loop to reset relay
-    return jsonify({'status': 'relay_reset_requested'})
+    if _decision_engine:
+        _decision_engine.reset_relay()
+        return jsonify({'status': 'relay_reset'})
+    return jsonify({'status': 'unavailable'}), 503
+
+@app.route('/persons', methods=['GET'])
+def persons():
+    if _get_people:
+        return jsonify(_get_people())
+    return jsonify([])
+
+@app.route('/persons/register', methods=['POST'])
+def register_person():
+    if not _register_person:
+        return jsonify({'error': 'person registration unavailable'}), 503
+
+    person_id = request.form.get('person_id', '').strip()
+    name = request.form.get('name', '').strip()
+    designation = request.form.get('designation', '').strip()
+    files = request.files.getlist('images')
+
+    if not person_id or not name or not designation or not files:
+        return jsonify({'error': 'person_id, name, designation and at least one image are required'}), 400
+
+    try:
+        import cv2
+        import numpy as np
+        images = []
+        for file in files:
+            raw = file.read()
+            image = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
+            if image is not None:
+                images.append(image)
+
+        person = _register_person(person_id, name, designation, images)
+        if _firebase:
+            _firebase.upsert_person(person)
+        return jsonify({'status': 'registered', 'person': person})
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 400
 
 @app.route('/health')
 def health():
     return jsonify({'status': 'ok', 'uptime': int(time.time() - _start_time)})
 
 
-def run_dashboard(get_jpeg_fn=None, firebase=None, port=5000, debug=False):
+def run_dashboard(get_jpeg_fn=None, firebase=None, port=5000, debug=False,
+                   decision_engine=None, register_person_fn=None, get_people_fn=None):
     """
     Start Flask server. Call this from main.py.
     Args:
@@ -114,9 +157,12 @@ def run_dashboard(get_jpeg_fn=None, firebase=None, port=5000, debug=False):
         firebase:    FirebaseHandler instance for fetching remote events
         port:        web server port (default 5000)
     """
-    global _get_jpeg_frame, _firebase
+    global _get_jpeg_frame, _firebase, _decision_engine, _register_person, _get_people
     _get_jpeg_frame = get_jpeg_fn
     _firebase       = firebase
+    _decision_engine = decision_engine
+    _register_person = register_person_fn
+    _get_people = get_people_fn
     print(f"[Dashboard] Starting at http://0.0.0.0:{port}")
     print(f"[Dashboard] Access from other devices: http://YOUR_IP:{port}")
     app.run(host='0.0.0.0', port=port,
