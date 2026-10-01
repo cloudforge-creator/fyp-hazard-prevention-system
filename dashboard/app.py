@@ -61,6 +61,8 @@ def add_event(result: dict):
             'fire':  result.get('fire_prob', 0),
             'people': result.get('current_people', []),
             'predicted_level': result.get('predicted_level', result.get('level', '')),
+            'response_level': result.get('response_level', result.get('level', '')),
+            'early_warning': result.get('early_warning', False),
         })
         if len(_event_history) > 50:
             _event_history.pop()
