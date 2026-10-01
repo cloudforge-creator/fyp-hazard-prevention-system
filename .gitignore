@@ -19,12 +19,16 @@ serviceAccountKey.json
 # Dataset images - too large for GitHub
 data/fire_images/
 
+# Local training dataset - do not commit
+data/fire_dataset/
+
 # Plots
 notebooks/plots/
 
 # OS files
 .DS_Store
 Thumbs.db
+
 # Local biometric enrollment data - do not commit
 data/person_faces/
 data/persons.json
