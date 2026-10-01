@@ -136,8 +136,15 @@ def sensor_loop(arduino: ArduinoReader,
             if cycle % 10 == 0:
                 firebase.update_live_sensors(live)
 
-            # Log event to dashboard history if not safe
-            if result['level'] != 'SAFE':
+            # Log current hazards, predictive responses, and early warnings.
+            # A predictive event can have level=SAFE/WARNING while response_level
+            # is PREDICTIVE_CRITICAL, so checking only result['level'] would hide it.
+            should_record_event = (
+                result.get('level', 'SAFE') != 'SAFE'
+                or result.get('response_level', 'SAFE') != 'SAFE'
+                or result.get('early_warning', False)
+            )
+            if should_record_event:
                 add_event(result)
 
             # Console output every cycle
