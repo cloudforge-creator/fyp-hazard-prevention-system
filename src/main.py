@@ -22,6 +22,7 @@ from src.gas_model       import predict_gas
 from src.lstm_model      import predict_anomaly
 from src.cnn_model       import predict_fire, get_jpeg_frame
 from src.decision_engine import DecisionEngine
+from src.predictive_logger import PredictiveDataLogger
 from src.firebase_handler import FirebaseHandler
 from dashboard.app       import (run_dashboard, update_live_data,
                                   add_event)
@@ -53,6 +54,7 @@ def sensor_loop(arduino: ArduinoReader,
     """
     print("[Main] Sensor loop started")
     cycle = 0
+    data_logger = PredictiveDataLogger()
 
     while True:
         cycle += 1
@@ -121,6 +123,7 @@ def sensor_loop(arduino: ArduinoReader,
                 'updated_at':  time.strftime('%H:%M:%S')
             }
             update_live_data(live)
+            data_logger.log(sensors, result)
 
             # Update Firebase live sensors every 10 cycles (~5 seconds)
             if cycle % 10 == 0:
