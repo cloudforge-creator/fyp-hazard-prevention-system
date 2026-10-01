@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.arduino_reader  import ArduinoReader
 from src.gas_model       import predict_gas
 from src.lstm_model      import predict_anomaly
-from src.cnn_model       import predict_fire, get_jpeg_frame
+from src.cnn_model       import predict_fire, get_jpeg_frame, get_current_persons
 from src.decision_engine import DecisionEngine
 from src.predictive_logger import PredictiveDataLogger
 from src.firebase_handler import FirebaseHandler
@@ -87,6 +87,7 @@ def sensor_loop(arduino: ArduinoReader,
 
             # Model 3: CNN fire detection
             fire_prob, _ = predict_fire()
+            current_people = get_current_persons()
 
             # ---- Step 3: Decision Engine fusion ----
             result = engine.evaluate(
@@ -97,7 +98,8 @@ def sensor_loop(arduino: ArduinoReader,
                 fire_prob    = fire_prob,
                 flame_signal = flame,
                 gas_raw      = gas_raw,
-                temperature  = temp or 25.0
+                temperature  = temp or 25.0,
+                current_people = current_people
             )
 
             # ---- Step 4: Update dashboard live data ----
@@ -118,12 +120,16 @@ def sensor_loop(arduino: ArduinoReader,
                 'early_warning': result.get('early_warning', False),
                 'forecast_horizon_seconds': result.get('forecast_horizon_seconds', 30),
                 'response_level': result.get('response_level', result['level']),
+                'current_people': result.get('current_people', current_people),
                 'method':      result['method'],
                 'cycle':       cycle,
                 'updated_at':  time.strftime('%H:%M:%S')
             }
             update_live_data(live)
             data_logger.log(sensors, result)
+
+            # Persist the current people visible to the camera separately from hazard events.
+            firebase.update_live_presence(current_people)
 
             # Update Firebase live sensors every 10 cycles (~5 seconds)
             if cycle % 10 == 0:
