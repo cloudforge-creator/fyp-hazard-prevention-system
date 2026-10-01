@@ -25,3 +25,7 @@ notebooks/plots/
 # OS files
 .DS_Store
 Thumbs.db
+# Local biometric enrollment data - do not commit
+data/person_faces/
+data/persons.json
+data/person_lbph.yml
