@@ -93,7 +93,9 @@ def sensor_loop(arduino: ArduinoReader,
                 temp_anomaly = temp_anomaly,
                 temp_error   = temp_error,
                 fire_prob    = fire_prob,
-                flame_signal = flame
+                flame_signal = flame,
+                gas_raw      = gas_raw,
+                temperature  = temp or 25.0
             )
 
             # ---- Step 4: Update dashboard live data ----
