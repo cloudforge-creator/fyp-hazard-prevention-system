@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.arduino_reader  import ArduinoReader
 from src.gas_model       import predict_gas
 from src.lstm_model      import predict_anomaly
-from src.cnn_model       import predict_fire, get_jpeg_frame, get_current_persons
+from src.cnn_model       import predict_fire, get_jpeg_frame, get_current_persons, get_cnn_model
 from src.decision_engine import DecisionEngine
 from src.predictive_logger import PredictiveDataLogger
 from src.firebase_handler import FirebaseHandler
@@ -210,7 +210,10 @@ def main():
         run_dashboard(
             get_jpeg_fn=get_jpeg_frame,
             firebase=firebase,
-            port=args.web_port
+            port=args.web_port,
+            decision_engine=engine,
+            register_person_fn=get_cnn_model().register_person,
+            get_people_fn=get_cnn_model().get_registered_people
         )
     except KeyboardInterrupt:
         print("\n[Main] Shutting down...")
