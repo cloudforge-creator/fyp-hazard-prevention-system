@@ -129,7 +129,8 @@ def sensor_loop(arduino: ArduinoReader,
             data_logger.log(sensors, result)
 
             # Persist the current people visible to the camera separately from hazard events.
-            firebase.update_live_presence(current_people)
+            if cycle % 2 == 0:
+                firebase.update_live_presence(current_people)
 
             # Update Firebase live sensors every 10 cycles (~5 seconds)
             if cycle % 10 == 0:
