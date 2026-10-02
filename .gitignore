@@ -33,3 +33,6 @@ Thumbs.db
 data/person_faces/
 data/persons.json
 data/person_lbph.yml
+
+# Runtime predictive sensor logs
+data/predictive_sensor_log.csv
