@@ -68,9 +68,18 @@ class DecisionEngineTests(unittest.TestCase):
         self.assertEqual(self.arduino.relay_activations, 0)
 
     def test_critical_classification_activates_relay(self):
-        result = self.evaluate(fire_prob=0.70)
+        # Exercise weighted-fusion CRITICAL behavior without using the
+        # separate CNN emergency override (fire_prob >= 0.80).
+        result = self.evaluate(
+            gas_label="methane",
+            gas_risk=0.90,
+            temp_anomaly=True,
+            temp_error=0.90,
+            fire_prob=0.70,
+        )
         self.assertEqual(result["level"], "CRITICAL")
         self.assertEqual(result["response_level"], "CRITICAL")
+        self.assertGreaterEqual(result["score"], 0.65)
         self.assertEqual(self.arduino.relay_activations, 1)
         self.assertEqual(len(self.firebase.alerts), 1)
         self.assertEqual(len(self.firebase.events), 1)
