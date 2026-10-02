@@ -101,3 +101,44 @@ fyp_hazard_system/
 - dashboard/static/js/firebase-sw.js:      firebaseConfig
 
 Everything else works as-is.
+
+
+## Real-time Person Presence and Hazard Correlation
+
+The camera now supports a local person-presence pipeline in addition to fire detection.
+
+### Runtime behavior
+
+1. The camera detects visible faces continuously.
+2. Registered faces are recognized locally and annotated above the person's head with:
+   - Name
+   - Designation
+   - Match score
+3. Unknown/unregistered faces are labelled **Unknown**.
+4. When a person leaves the camera view, the active presence entry expires automatically.
+5. When a warning/critical hazard event occurs, the people visible at that moment are attached to the event record.
+6. Firebase stores:
+   - `/persons` - name/designation metadata
+   - `/live_presence` - people currently visible
+   - `/live_sensors` - current sensor/prediction state
+   - `/events` - hazard events including people present
+
+### Registering people
+
+Run the application and open the dashboard. Use **Register a person** and upload one or more clear face images. The face model is stored locally under `data/person_faces/` and is intentionally ignored by Git.
+
+The dashboard endpoints are:
+
+- `POST /persons/register`
+- `GET /persons`
+- `POST /reset_relay`
+
+For real hardware, keep the camera pointed at the monitored zone. The system records that a recognized person was visible in the camera's monitored area when a hazard event occurred; it does **not** calculate exact physical distance from the hazard.
+
+### OpenCV requirement
+
+Face recognition uses OpenCV's contrib face module. The requirements file therefore uses `opencv-contrib-python` instead of `opencv-python`.
+
+### Privacy
+
+Biometric face samples and the local recognition model are not committed to GitHub. Firebase receives person metadata and live/event presence information, not the local face-image files.

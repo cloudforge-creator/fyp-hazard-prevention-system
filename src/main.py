@@ -20,8 +20,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.arduino_reader  import ArduinoReader
 from src.gas_model       import predict_gas
 from src.lstm_model      import predict_anomaly
-from src.cnn_model       import predict_fire, get_jpeg_frame
+from src.cnn_model       import predict_fire, get_jpeg_frame, get_current_persons, get_cnn_model
 from src.decision_engine import DecisionEngine
+from src.predictive_logger import PredictiveDataLogger
 from src.firebase_handler import FirebaseHandler
 from dashboard.app       import (run_dashboard, update_live_data,
                                   add_event)
@@ -53,6 +54,7 @@ def sensor_loop(arduino: ArduinoReader,
     """
     print("[Main] Sensor loop started")
     cycle = 0
+    data_logger = PredictiveDataLogger()
 
     while True:
         cycle += 1
@@ -85,6 +87,7 @@ def sensor_loop(arduino: ArduinoReader,
 
             # Model 3: CNN fire detection
             fire_prob, _ = predict_fire()
+            current_people = get_current_persons()
 
             # ---- Step 3: Decision Engine fusion ----
             result = engine.evaluate(
@@ -93,7 +96,10 @@ def sensor_loop(arduino: ArduinoReader,
                 temp_anomaly = temp_anomaly,
                 temp_error   = temp_error,
                 fire_prob    = fire_prob,
-                flame_signal = flame
+                flame_signal = flame,
+                gas_raw      = gas_raw,
+                temperature  = temp or 25.0,
+                current_people = current_people
             )
 
             # ---- Step 4: Update dashboard live data ----
@@ -107,18 +113,38 @@ def sensor_loop(arduino: ArduinoReader,
                 'temp_error':  temp_error,
                 'risk_level':  result['level'],
                 'risk_score':  result['score'],
+                'predicted_level': result.get('predicted_level', result['level']),
+                'predicted_score': result.get('predicted_score', result['score']),
+                'prediction_confidence': result.get('prediction_confidence', 0.0),
+                'prediction_trend': result.get('prediction_trend', 'N/A'),
+                'early_warning': result.get('early_warning', False),
+                'forecast_horizon_seconds': result.get('forecast_horizon_seconds', 30),
+                'response_level': result.get('response_level', result['level']),
+                'current_people': result.get('current_people', current_people),
                 'method':      result['method'],
                 'cycle':       cycle,
                 'updated_at':  time.strftime('%H:%M:%S')
             }
             update_live_data(live)
+            data_logger.log(sensors, result)
+
+            # Persist the current people visible to the camera separately from hazard events.
+            if cycle % 2 == 0:
+                firebase.update_live_presence(current_people)
 
             # Update Firebase live sensors every 10 cycles (~5 seconds)
             if cycle % 10 == 0:
-                firebase.update_live_sensors(result)
+                firebase.update_live_sensors(live)
 
-            # Log event to dashboard history if not safe
-            if result['level'] != 'SAFE':
+            # Log current hazards, predictive responses, and early warnings.
+            # A predictive event can have level=SAFE/WARNING while response_level
+            # is PREDICTIVE_CRITICAL, so checking only result['level'] would hide it.
+            should_record_event = (
+                result.get('level', 'SAFE') != 'SAFE'
+                or result.get('response_level', 'SAFE') != 'SAFE'
+                or result.get('early_warning', False)
+            )
+            if should_record_event:
                 add_event(result)
 
             # Console output every cycle
@@ -132,7 +158,10 @@ def sensor_loop(arduino: ArduinoReader,
                   f"Gas:{gas_label:<12} Risk:{gas_risk:.2f} | "
                   f"Temp:{temp or 0:.1f}°C Anom:{temp_anomaly} | "
                   f"Fire:{fire_prob:.0%} | "
-                  f"Level:{result['level']} Score:{result['score']:.3f}")
+                  f"Level:{result['level']} Score:{result['score']:.3f} | "
+                f"Pred:{result.get('predicted_level', result['level'])} "
+                f"PredScore:{result.get('predicted_score', result['score']):.3f} "
+                f"Trend:{result.get('prediction_trend', 'N/A')}")
 
         except KeyboardInterrupt:
             raise
@@ -189,7 +218,10 @@ def main():
         run_dashboard(
             get_jpeg_fn=get_jpeg_frame,
             firebase=firebase,
-            port=args.web_port
+            port=args.web_port,
+            decision_engine=engine,
+            register_person_fn=get_cnn_model().register_person,
+            get_people_fn=get_cnn_model().get_registered_people
         )
     except KeyboardInterrupt:
         print("\n[Main] Shutting down...")

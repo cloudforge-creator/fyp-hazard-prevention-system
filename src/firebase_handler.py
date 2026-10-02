@@ -52,6 +52,8 @@ class FirebaseHandler:
             self.events_ref   = db.reference('/events')
             self.sensors_ref  = db.reference('/live_sensors')
             self.token_ref    = db.reference('/admin_token')
+            self.persons_ref  = db.reference('/persons')
+            self.presence_ref = db.reference('/live_presence')
             self.initialised  = True
             print("[Firebase] Connected to Firebase Realtime Database")
         except FileNotFoundError:
@@ -71,11 +73,16 @@ class FirebaseHandler:
         try:
             payload = {
                 'gas_type':    data.get('gas', 'unknown'),
-                'gas_risk':    data.get('score', 0),
-                'temperature': data.get('temp', 0),
+                'gas_risk':    data.get('gas_risk', data.get('score', 0)),
+                'temperature': data.get('temperature', data.get('temp', 0)),
+                'humidity':    data.get('humidity', 0),
                 'fire_prob':   data.get('fire_prob', 0),
                 'risk_level':  data.get('level', 'SAFE'),
-                'temp_anomaly':data.get('temp_anomaly', False),
+                'risk_score':  data.get('score', 0),
+                'predicted_level': data.get('predicted_level', data.get('level', 'SAFE')),
+                'predicted_score': data.get('predicted_score', data.get('score', 0)),
+                'prediction_trend': data.get('prediction_trend', 'STABLE'),
+                'current_people': data.get('current_people', []),
                 'updated_at':  datetime.now().isoformat()
             }
             self.sensors_ref.set(payload)
@@ -99,10 +106,65 @@ class FirebaseHandler:
                 'fire_prob':   result['fire_prob'],
                 'temp_anomaly':result['temp_anomaly'],
                 'temp_error':  result['temp_error'],
+                'predicted_level': result.get('predicted_level', result['level']),
+                'predicted_score': result.get('predicted_score', result['score']),
+                'prediction_trend': result.get('prediction_trend', 'N/A'),
+                'current_people': result.get('current_people', []),
+                'response_level': result.get('response_level', result['level']),
                 'timestamp':   datetime.now().isoformat()
             })
         except Exception as e:
             print(f"[Firebase] Log error: {e}")
+
+
+    # ---- PERSON / PRESENCE DATA ----
+
+    def upsert_person(self, person: dict):
+        """Store non-biometric person metadata in Firebase."""
+        if self.simulation:
+            return
+        try:
+            person_id = person['person_id']
+            payload = {
+                'name': person.get('name', ''),
+                'designation': person.get('designation', ''),
+                'active': person.get('active', True),
+                'updated_at': datetime.now().isoformat()
+            }
+            self.persons_ref.child(person_id).set(payload)
+        except Exception as e:
+            print(f"[Firebase] Person metadata error: {e}")
+
+    def update_live_presence(self, people):
+        """Overwrite the people currently visible to the camera."""
+        if self.simulation:
+            return
+        try:
+            payload = {
+                str(p.get('person_id')): {
+                    'name': p.get('name', 'Unknown'),
+                    'designation': p.get('designation', 'Unregistered'),
+                    'match_score': p.get('match_score', 0),
+                    'first_seen': p.get('first_seen', 0),
+                    'last_seen': p.get('last_seen', 0)
+                }
+                for p in (people or [])
+            }
+            self.presence_ref.set(payload)
+        except Exception as e:
+            print(f"[Firebase] Presence update error: {e}")
+
+    def get_people(self):
+        if self.simulation:
+            return []
+        try:
+            snap = self.persons_ref.get()
+            if not snap:
+                return []
+            return list(snap.values())
+        except Exception as e:
+            print(f"[Firebase] People fetch error: {e}")
+            return []
 
     # ---- PUSH NOTIFICATIONS ----
 
@@ -116,7 +178,8 @@ class FirebaseHandler:
             print(f"  Title: {result['level']} HAZARD DETECTED")
             print(f"  Body:  Gas={result['gas']} | "
                   f"Risk={result['score']:.0%} | "
-                  f"Fire={result['fire_prob']:.0%}")
+                  f"Fire={result['fire_prob']:.0%} | " +
+                                      f"People={len(result.get('current_people', []))}")
             return
 
         token = self._get_device_token()
@@ -160,7 +223,8 @@ class FirebaseHandler:
                             alert=messaging.ApsAlert(
                                 title=f"{result['level']} HAZARD",
                                 body=(f"Gas: {result['gas']} | "
-                                      f"Risk: {result['score']:.0%}")
+                                      f"Risk: {result['score']:.0%} | " +
+                                      f"People={len(result.get('current_people', []))}")
                             ),
                             sound='default',
                             badge=1,

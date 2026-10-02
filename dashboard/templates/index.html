@@ -91,6 +91,12 @@
     <div class="card-sub">%RH</div>
   </div>
   <div class="card">
+    <div class="card-label">Predicted hazard risk (30s)</div>
+    <div class="card-value" id="predicted-level" style="font-size:1.4rem">SAFE</div>
+    <div class="card-sub">Score: <span id="predicted-score">0%</span> · Trend: <span id="prediction-trend">—</span></div>
+    <div class="bar-wrap"><div class="bar green" id="predicted-bar" style="width:0%"></div></div>
+  </div>
+  <div class="card">
     <div class="card-label">Fire probability (CNN)</div>
     <div class="card-value" id="fire-prob">0%</div>
     <div class="bar-wrap"><div class="bar green" id="fire-bar" style="width:0%"></div></div>
@@ -107,6 +113,23 @@
            onerror="this.style.display='none';document.getElementById('no-cam').style.display='flex'">
       <div id="no-cam" class="no-cam" style="display:none">No camera connected</div>
     </div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">People currently visible to camera</div>
+    <div id="current-people" style="min-height:80px;color:#718096">No recognized/visible person</div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Register a person</div>
+    <form id="person-form" enctype="multipart/form-data">
+      <input name="person_id" placeholder="Person ID (e.g. EMP001)" required style="width:100%;margin-bottom:8px;padding:8px;background:#0f1117;color:#fff;border:1px solid #2d3142;border-radius:6px">
+      <input name="name" placeholder="Full name" required style="width:100%;margin-bottom:8px;padding:8px;background:#0f1117;color:#fff;border:1px solid #2d3142;border-radius:6px">
+      <input name="designation" placeholder="Designation" required style="width:100%;margin-bottom:8px;padding:8px;background:#0f1117;color:#fff;border:1px solid #2d3142;border-radius:6px">
+      <input name="images" type="file" accept="image/*" multiple required style="width:100%;margin-bottom:8px;color:#a0aec0">
+      <button type="submit" style="padding:8px 14px;border:0;border-radius:6px;cursor:pointer">Register person</button>
+      <div id="person-form-status" style="margin-top:8px;color:#718096"></div>
+    </form>
   </div>
 
   <div class="card">
@@ -129,6 +152,18 @@
         <div class="score-val" id="fused-score">—</div>
       </div>
       <div class="score-row">
+        <div class="score-label">Predicted hazard level</div>
+        <div class="score-val" id="predicted-level-detail">—</div>
+      </div>
+      <div class="score-row">
+        <div class="score-label">Prediction confidence</div>
+        <div class="score-val" id="prediction-confidence">—</div>
+      </div>
+      <div class="score-row">
+        <div class="score-label">Early warning</div>
+        <div class="score-val" id="early-warning">No</div>
+      </div>
+      <div class="score-row">
         <div class="score-label">Decision method</div>
         <div class="score-val" id="method">—</div>
       </div>
@@ -146,11 +181,11 @@
         <thead>
           <tr>
             <th>Time</th><th>Level</th><th>Gas</th>
-            <th>Risk score</th><th>Fire prob</th>
+            <th>Risk score</th><th>Fire prob</th><th>People present</th>
           </tr>
         </thead>
         <tbody id="event-tbody">
-          <tr><td colspan="5" style="color:#4a5568;text-align:center;padding:20px">
+          <tr><td colspan="6" style="color:#4a5568;text-align:center;padding:20px">
             No events yet — system monitoring...
           </td></tr>
         </tbody>
@@ -177,6 +212,21 @@ function setBar(id, pct) {
   const el = document.getElementById(id);
   el.style.width = Math.min(100, pct) + '%';
   el.className = 'bar ' + colorClass(pct);
+}
+
+function renderPeople(people) {
+  const el = document.getElementById('current-people');
+  if (!people || people.length === 0) {
+    el.innerHTML = '<span style="color:#4a5568">No recognized/visible person</span>';
+    return;
+  }
+  el.innerHTML = people.map(function(p) {
+    const score = p.match_score ? ' · Match ' + Math.round(p.match_score*100) + '%' : '';
+    return '<div style="padding:8px 0;border-bottom:1px solid #2d3142">' +
+           '<strong style="color:#fff">' + (p.name || 'Unknown') + '</strong><br>' +
+           '<span style="font-size:12px;color:#718096">' +
+           (p.designation || 'Unregistered') + score + '</span></div>';
+  }).join('');
 }
 
 function pollData() {
@@ -208,6 +258,26 @@ function pollData() {
       document.getElementById('fire-prob').textContent = fp + '%';
       setBar('fire-bar', fp);
 
+      const predicted = d.predicted_score || 0;
+      const predictedPct = Math.round(predicted * 100);
+      document.getElementById('predicted-level').textContent =
+          d.predicted_level || 'SAFE';
+      document.getElementById('predicted-level').style.color =
+          d.predicted_level === 'CRITICAL' ? '#fc8181' :
+          d.predicted_level === 'WARNING' ? '#f6ad55' : '#48bb78';
+      document.getElementById('predicted-score').textContent = predictedPct + '%';
+      document.getElementById('prediction-trend').textContent =
+          d.prediction_trend || '—';
+      setBar('predicted-bar', predictedPct);
+      document.getElementById('predicted-level-detail').textContent =
+          d.predicted_level || 'SAFE';
+      document.getElementById('prediction-confidence').textContent =
+          Math.round((d.prediction_confidence || 0) * 100) + '%';
+      document.getElementById('early-warning').textContent =
+          d.early_warning ? '⚠ YES' : 'No';
+      document.getElementById('early-warning').style.color =
+          d.early_warning ? '#f6ad55' : '#718096';
+
       // Model scores
       document.getElementById('cnn-score').textContent =
           ((d.fire_prob || 0) * 100).toFixed(1) + '%';
@@ -221,6 +291,8 @@ function pollData() {
           d.method || '—';
       document.getElementById('cycle').textContent =
           d.cycle || '—';
+
+      renderPeople(d.current_people || []);
 
       document.getElementById('uptime').textContent =
           d.uptime ? d.uptime + 's' : '—';
@@ -242,11 +314,26 @@ function pollEvents() {
           <td>${(e.gas || '—').toUpperCase()}</td>
           <td>${e.score != null ? (e.score*100).toFixed(0)+'%' : '—'}</td>
           <td>${e.fire_prob != null ? (e.fire_prob*100).toFixed(0)+'%' : '—'}</td>
+          <td>${(e.people || []).map(function(p){return p.name || 'Unknown';}).join(', ') || 'None recorded'}</td>
         </tr>`;
       }).join('');
     })
     .catch(() => {});
 }
+
+document.getElementById('person-form').addEventListener('submit', function(ev) {
+  ev.preventDefault();
+  const form = ev.target;
+  const status = document.getElementById('person-form-status');
+  status.textContent = 'Registering...';
+  fetch('/persons/register', { method:'POST', body:new FormData(form) })
+    .then(function(r){ return r.json().then(function(data){ return {ok:r.ok,data:data}; }); })
+    .then(function(result) {
+      status.textContent = result.ok ? 'Registered successfully: ' + result.data.person.name : 'Error: ' + result.data.error;
+      if (result.ok) form.reset();
+    })
+    .catch(function(){ status.textContent = 'Registration request failed'; });
+});
 
 // Poll data every 1 second, events every 5 seconds
 setInterval(pollData,   1000);

@@ -13,6 +13,7 @@ import os
 
 MODEL_PATH  = 'models/gas_rf_model.pkl'
 SCALER_PATH = 'models/gas_scaler.pkl'
+LABELS_PATH = 'models/gas_labels.pkl'
 
 # MQ-2 Rs/Ro ratio ranges from datasheet (approximate)
 # Lower ratio = higher gas concentration
@@ -45,13 +46,14 @@ class GasModel:
             try:
                 self.model  = joblib.load(MODEL_PATH)
                 self.scaler = joblib.load(SCALER_PATH)
+                self.labels = joblib.load(LABELS_PATH) if os.path.exists(LABELS_PATH) else ['clean_air', 'smoke', 'co', 'lpg', 'methane', 'hydrogen']
                 self.model_loaded = True
                 print("[GasModel] Trained model loaded")
             except Exception as e:
                 print(f"[GasModel] Model load failed: {e} - using rule-based")
         else:
             print("[GasModel] No trained model found - using MQ-2 datasheet rules")
-            print("[GasModel] Run notebooks/01_train_gas_model.ipynb to train")
+            print("[GasModel] Run notebooks/01_train_gas_model.py to train")
 
     def predict(self, gas_ratio: float, gas_raw: int):
         """
@@ -74,13 +76,25 @@ class GasModel:
             return self._rule_predict(gas_ratio)
 
     def _model_predict(self, gas_ratio, gas_raw):
-        features = np.array([[gas_ratio, gas_raw,
-                               gas_ratio ** 2,
-                               1.0 / max(gas_ratio, 0.01)]])
+        # Keep runtime features identical to notebooks/01_train_gas_model.py:
+        # ratio, ratio^2, 1/ratio, log(ratio), adc_approx.
+        ratio = float(gas_ratio)
+        ratio_safe = max(ratio, 0.01)
+        adc_approx = np.clip(1023 - (ratio / 15.0 * 1023), 0, 1023)
+
+        features = np.array([[
+            ratio,
+            ratio ** 2,
+            1.0 / ratio_safe,
+            np.log(ratio_safe),
+            adc_approx
+        ]])
+
         features_scaled = self.scaler.transform(features)
-        label = self.model.predict(features_scaled)[0]
+        class_id = int(self.model.predict(features_scaled)[0])
+        label = self.labels[class_id] if 0 <= class_id < len(self.labels) else 'unknown'
         proba = self.model.predict_proba(features_scaled).max()
-        risk  = GAS_RISK.get(label, 0.5) * proba
+        risk = GAS_RISK.get(label, 0.5) * proba
         return label, round(float(risk), 3)
 
     def _rule_predict(self, ratio):
