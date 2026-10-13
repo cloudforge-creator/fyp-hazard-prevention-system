@@ -71,6 +71,15 @@ class CNNModel:
             t.start()
 
     def _init_camera(self):
+        # Keep the webcam disabled in normal simulation unless explicitly requested.
+        simulation = os.environ.get('FYP_SIMULATION', '0') == '1'
+        camera_enabled = os.environ.get('FYP_CAMERA_ENABLED', '0') == '1'
+        if simulation and not camera_enabled:
+            self.cam = None
+            self.camera_active = False
+            print('[CNNModel] SIMULATION mode - camera disabled; using synthetic fire probability')
+            return
+
         try:
             import cv2
             if os.name == 'nt':
@@ -210,12 +219,14 @@ class CNNModel:
             ) >= VISUAL_CONFIRM_FRAMES
         )
 
-        final_prob = max(cnn_prob, visual_score)
+        # An unconfirmed color-based cue is diagnostic only. It must not
+        # independently raise the fire probability or trigger an alert.
+        final_prob = cnn_prob
 
         if confirmed_visual:
             # This is an explicit safety signal, not a claim that the CNN
             # itself produced 85%. It intentionally activates the existing
-            # DecisionEngine fire override after temporal confirmation.
+            # DecisionEngine fire override only after temporal confirmation.
             final_prob = max(final_prob, VISUAL_OVERRIDE_PROB)
 
         final_prob = max(0.0, min(1.0, final_prob))

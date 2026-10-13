@@ -6,6 +6,7 @@ and CNN fire model into a single risk classification.
 """
 import time
 import threading
+from collections import deque
 
 from src.predictive_risk import PredictiveRiskModel
 
@@ -42,6 +43,8 @@ class DecisionEngine:
         self._last_warning_time = 0
         self._warning_cooldown  = 30    # seconds between warning alerts
         self._cycle_count       = 0
+        # Require sustained CNN confidence across sensor cycles; physical flame stays immediate.
+        self._cnn_override_history = deque(maxlen=3)
         self._last_critical_time = 0
         self._critical_cooldown = 30
         self._current_level     = 'SAFE'
@@ -76,9 +79,16 @@ class DecisionEngine:
         """
         self._cycle_count += 1
 
+        # Confirm high CNN scores across three sensor cycles to reduce single-frame false positives.
+        self._cnn_override_history.append(fire_prob >= FIRE_OVERRIDE_PROB)
+        cnn_override_confirmed = (
+            len(self._cnn_override_history) == self._cnn_override_history.maxlen
+            and all(self._cnn_override_history)
+        )
+
         # ---- HARD OVERRIDE: Immediate Critical ----
-        # Physical flame sensor triggered OR CNN very confident
-        if flame_signal == FLAME_OVERRIDE_SIGNAL or fire_prob >= FIRE_OVERRIDE_PROB:
+        # A physical flame sensor remains immediate; CNN-only override needs persistence.
+        if flame_signal == FLAME_OVERRIDE_SIGNAL or cnn_override_confirmed:
             reason = 'flame_sensor' if flame_signal == 1 else 'cnn_override'
             result = self._build_result(
                 level='CRITICAL',
@@ -192,8 +202,9 @@ class DecisionEngine:
             else:
                 print(f"[ENGINE] *** CRITICAL *** score={result['score']:.2f} "
                       f"gas={result['gas']} fire={result['fire_prob']:.0%}")
-            # Cut machine power
-            if self.arduino:
+            # Predictive critical is an early warning, not a confirmed current hazard.
+            # Only a current CRITICAL classification may activate the relay.
+            if response_level == 'CRITICAL' and self.arduino:
                 self.arduino.activate_relay()
             # Send Firebase alert
             now = time.time()

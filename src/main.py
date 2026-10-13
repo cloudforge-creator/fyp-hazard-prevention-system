@@ -36,6 +36,8 @@ def parse_args():
                         help='Arduino serial port (e.g. COM4 or /dev/ttyUSB0)')
     parser.add_argument('--no-firebase', action='store_true',
                         help='Disable Firebase (simulation only)')
+    parser.add_argument('--sim-camera', action='store_true',
+                        help='Open the real webcam while keeping sensor values simulated')
     parser.add_argument('--web-port', type=int, default=5000,
                         help='Flask dashboard port (default 5000)')
     return parser.parse_args()
@@ -179,6 +181,9 @@ def sensor_loop(arduino: ArduinoReader,
 def main():
     args = parse_args()
     sim_mode = args.sim
+    # Sensor simulation and webcam enablement are independent settings.
+    os.environ['FYP_SIMULATION'] = '1' if sim_mode else '0'
+    os.environ['FYP_CAMERA_ENABLED'] = '1' if args.sim_camera else '0'
 
     print("=" * 60)
     print("  Predictive AI Hazard Prevention System")
