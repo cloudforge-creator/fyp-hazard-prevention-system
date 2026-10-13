@@ -179,6 +179,8 @@ def sensor_loop(arduino: ArduinoReader,
 def main():
     args = parse_args()
     sim_mode = args.sim
+    # Keep camera inference disabled during a full simulation run.
+    os.environ['FYP_SIMULATION'] = '1' if sim_mode else '0'
 
     print("=" * 60)
     print("  Predictive AI Hazard Prevention System")
