@@ -719,12 +719,14 @@ This demonstrates the software integration path from input → AI → decision �
 
 # 18. Phase 15 — Automated Software Testing
 
-The repository contains Pytest tests:
+The repository contains Pytest tests for decision logic, predictive risk, gas-model rule fallbacks, and CNN fire-probability mapping:
 
 ```
 tests/
   test_decision_engine.py
   test_predictive_risk.py
+  test_gas_model.py
+  test_cnn_model.py
 ```
 
 Run locally:
@@ -848,7 +850,10 @@ fyp-hazard-prevention-system/
 │   └── temperature_dataset/
 │
 ├── docs/
+│   ├── HARDWARE_SETUP.md
 │   └── SOFTWARE_VALIDATION.md
+│
+├── CONTRIBUTING.md
 │
 ├── models/
 │   ├── cnn_fire_architecture.json
@@ -882,7 +887,9 @@ fyp-hazard-prevention-system/
 │
 ├── tests/
 │   ├── test_decision_engine.py
-│   └── test_predictive_risk.py
+│   ├── test_predictive_risk.py
+│   ├── test_gas_model.py
+│   └── test_cnn_model.py
 │
 ├── .dockerignore
 ├── .gitignore
@@ -1463,7 +1470,11 @@ docker build -t fyp-hazard-prevention .
 
 ---
 
-## 40. Documentation
+## 40. Demo capture
+
+A real dashboard screenshot/GIF should be captured from a running simulation rather than fabricated from placeholder values. Start the app with `python src/main.py --sim --no-firebase`, open `http://localhost:5000`, wait for live data, and capture the dashboard using the operating system screenshot tool or a screen recorder. Remove any personal information before publishing the image.
+
+## 41. Documentation
 
 Detailed software validation information is available in:
 
