@@ -100,9 +100,13 @@ class ArduinoReader:
 
     def _simulate(self):
         t = time.time()
+        # Normal-operation baseline: MQ-2 Rs/Ro is typically much higher in
+        # clean air than the 1.2-ish ratio that previously simulated elevated gas.
+        # Keep small variation so the dashboard remains live without inventing
+        # a persistent gas hazard in the default simulation.
         return {
             'gas_raw':   int(350 + 50 * math.sin(t / 10)),
-            'gas_ratio': round(1.2 + 0.3 * math.sin(t / 10), 4),
+            'gas_ratio': round(9.5 + 0.3 * math.sin(t / 10), 4),
             'temp':      round(28.0 + 2.0 * math.sin(t / 30), 2),
             'humidity':  round(55.0 + 5.0 * math.cos(t / 20), 2),
             'flame':     0
