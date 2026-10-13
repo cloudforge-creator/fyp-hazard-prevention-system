@@ -120,9 +120,14 @@ class CNNModel:
         """Return fire probability for one BGR image using the trained model."""
         import cv2
 
+        import tensorflow as tf
+
         resized = cv2.resize(image, IMG_SIZE)
-        arr = resized.astype('float32') / 255.0
-        arr = np.expand_dims(arr, 0)
+        resized = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+        arr = tf.keras.applications.mobilenet_v2.preprocess_input(
+            resized.astype(np.float32)
+        )
+        arr = np.expand_dims(arr, axis=0)
 
         raw = self.model.predict(arr, verbose=0)
         no_fire_prob = float(np.asarray(raw).reshape(-1)[0])

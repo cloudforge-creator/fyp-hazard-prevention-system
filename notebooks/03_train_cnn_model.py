@@ -59,7 +59,7 @@ if fire_count < 50 or nofire_count < 50:
 print("\n[1/5] Setting up data generators...")
 
 train_gen = tf.keras.preprocessing.image.ImageDataGenerator(
-    rescale=1.0 / 255.0,
+    preprocessing_function=tf.keras.applications.mobilenet_v2.preprocess_input,
     rotation_range=25,
     width_shift_range=0.15,
     height_shift_range=0.15,
@@ -71,7 +71,7 @@ train_gen = tf.keras.preprocessing.image.ImageDataGenerator(
 
 # Validation must NOT use random augmentation.
 val_gen = tf.keras.preprocessing.image.ImageDataGenerator(
-    rescale=1.0 / 255.0,
+    preprocessing_function=tf.keras.applications.mobilenet_v2.preprocess_input,
     validation_split=0.2,
 )
 
@@ -146,6 +146,14 @@ class StopAtAccuracy(tf.keras.callbacks.Callback):
             print(f"\n  Target validation accuracy {acc:.4f} reached - stopping")
             self.model.stop_training = True
 
+best_checkpoint = tf.keras.callbacks.ModelCheckpoint(
+    "models/cnn_fire_model_best.h5",
+    monitor="val_accuracy",
+    save_best_only=True,
+    mode="max",
+    verbose=1,
+)
+
 cb1 = [
     tf.keras.callbacks.EarlyStopping(
         monitor="val_accuracy",
@@ -153,13 +161,7 @@ cb1 = [
         restore_best_weights=True,
         verbose=1,
     ),
-    tf.keras.callbacks.ModelCheckpoint(
-        "models/cnn_fire_model.h5",
-        monitor="val_accuracy",
-        save_best_only=True,
-        mode="max",
-        verbose=1,
-    ),
+    best_checkpoint,
     StopAtAccuracy(),
 ]
 
@@ -191,13 +193,7 @@ callbacks_p2 = [
         restore_best_weights=True,
         verbose=1,
     ),
-    tf.keras.callbacks.ModelCheckpoint(
-        "models/cnn_fire_model.h5",
-        monitor="val_accuracy",
-        save_best_only=True,
-        mode="max",
-        verbose=1,
-    ),
+    best_checkpoint,
 ]
 
 h2 = cnn.fit(
@@ -211,8 +207,15 @@ h2 = cnn.fit(
 # ---- 5. Evaluate + save ----
 print("\n[5/5] Evaluating and saving...")
 
+best_path = "models/cnn_fire_model_best.h5"
+if not os.path.isfile(best_path):
+    raise FileNotFoundError(
+        f"Best checkpoint not found: {best_path}. Training did not save a model."
+    )
+
+cnn = tf.keras.models.load_model(best_path)
 cnn.save("models/cnn_fire_model.h5")
-print("  Saved: models/cnn_fire_model.h5")
+print("  Saved best checkpoint as: models/cnn_fire_model.h5")
 
 val_data.reset()
 val_loss, val_acc = cnn.evaluate(val_data, verbose=0)
