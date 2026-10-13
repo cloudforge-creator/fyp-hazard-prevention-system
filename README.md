@@ -9,6 +9,19 @@
 
 ---
 
+## Quick project resources
+
+- [Contribution guidelines](CONTRIBUTING.md)
+- [Hardware bring-up and safety checklist](docs/HARDWARE_SETUP.md)
+- [Standalone model evaluation](notebooks/04_evaluate_models.py)
+- [Model plot outputs and provenance](notebooks/plots/README.md)
+
+### Model evaluation
+
+Run `python notebooks/04_evaluate_models.py` from the repository root to create a CNN validation report, confusion-matrix plot, and JSON metrics under `notebooks/plots/`. The CNN result uses the training pipeline's 20% validation split; it is not an independent test-set result. Optional labeled gas and temperature CSVs can be passed with `--gas-csv` and `--temperature-csv`.
+
+The training script generates `notebooks/plots/cnn_training_accuracy.png` when a real training run completes. Evaluation plots and metrics are generated locally and are not committed as if they were measured here.
+
 ## 1. Project Overview
 
 The **Predictive AI Hazard Prevention System** is a multi-layer safety system designed to detect hazardous conditions, combine multiple AI/sensor signals into a single risk decision, provide early-warning prediction, monitor people present in the camera view, and trigger prevention/notification actions.
@@ -706,12 +719,14 @@ This demonstrates the software integration path from input → AI → decision �
 
 # 18. Phase 15 — Automated Software Testing
 
-The repository contains Pytest tests:
+The repository contains Pytest tests for decision logic, predictive risk, gas-model rule fallbacks, and CNN fire-probability mapping:
 
 ```
 tests/
   test_decision_engine.py
   test_predictive_risk.py
+  test_gas_model.py
+  test_cnn_model.py
 ```
 
 Run locally:
@@ -835,7 +850,10 @@ fyp-hazard-prevention-system/
 │   └── temperature_dataset/
 │
 ├── docs/
+│   ├── HARDWARE_SETUP.md
 │   └── SOFTWARE_VALIDATION.md
+│
+├── CONTRIBUTING.md
 │
 ├── models/
 │   ├── cnn_fire_architecture.json
@@ -869,7 +887,9 @@ fyp-hazard-prevention-system/
 │
 ├── tests/
 │   ├── test_decision_engine.py
-│   └── test_predictive_risk.py
+│   ├── test_predictive_risk.py
+│   ├── test_gas_model.py
+│   └── test_cnn_model.py
 │
 ├── .dockerignore
 ├── .gitignore
@@ -1450,7 +1470,11 @@ docker build -t fyp-hazard-prevention .
 
 ---
 
-## 40. Documentation
+## 40. Demo capture
+
+A real dashboard screenshot/GIF should be captured from a running simulation rather than fabricated from placeholder values. Start the app with `python src/main.py --sim --no-firebase`, open `http://localhost:5000`, wait for live data, and capture the dashboard using the operating system screenshot tool or a screen recorder. Remove any personal information before publishing the image.
+
+## 41. Documentation
 
 Detailed software validation information is available in:
 

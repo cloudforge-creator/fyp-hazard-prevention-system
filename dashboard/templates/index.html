@@ -58,13 +58,33 @@
   .score-label{color:#718096}
   .score-val{color:#fff;font-weight:500}
   @media(max-width:700px){.main-grid{grid-template-columns:1fr}}
+  /* Light theme overrides; dark remains the default. */
+  body.light{background:#f4f7fb;color:#1a202c}
+  body.light header{background:#fff;border-color:#d8dee9}
+  body.light header h1{color:#4a5568}
+  body.light header h1 span{color:#1a202c}
+  body.light .card{background:#fff;border-color:#d8dee9}
+  body.light .card-value,body.light .score-val{color:#1a202c}
+  body.light .card-label,body.light .card-sub,body.light .section-title,
+  body.light .score-label,body.light .uptime{color:#64748b}
+  body.light .bar-wrap{background:#e2e8f0}
+  body.light .event-table th{color:#64748b;border-color:#d8dee9}
+  body.light .event-table td{color:#475569;border-color:#e2e8f0}
+  body.light .event-table tr:hover td{background:#f1f5f9}
+  body.light .score-row{border-color:#e2e8f0}
+  body.light input,body.light button{color:#1a202c!important;background:#f8fafc!important;border-color:#cbd5e1!important}
+  body.light .risk-badge.SAFE{background:#dcfce7}
+  body.light .risk-badge.WARNING{background:#fef3c7}
+  body.light .risk-badge.CRITICAL{background:#fee2e2}
+  .theme-toggle{padding:7px 11px;border:1px solid #4a5568;border-radius:8px;background:transparent;color:inherit;cursor:pointer;font-size:12px}
+  body.light .theme-toggle{border-color:#cbd5e1}
 </style>
 </head>
 <body>
 
 <header>
   <h1>Predictive AI <span>Hazard Prevention System</span></h1>
-  <div class="uptime">Uptime: <span id="uptime">0s</span></div>
+  <div style="display:flex;align-items:center;gap:14px"><button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">☀ Light mode</button><div class="uptime">Uptime: <span id="uptime">0s</span></div></div>
 </header>
 
 <!-- Top metric cards -->
@@ -196,6 +216,24 @@
 </div>
 
 <script>
+const themeButton = document.getElementById('theme-toggle');
+function applyTheme(theme) {
+  const light = theme === 'light';
+  document.body.classList.toggle('light', light);
+  themeButton.textContent = light ? '☾ Dark mode' : '☀ Light mode';
+  themeButton.setAttribute('aria-pressed', String(light));
+}
+try {
+  applyTheme(localStorage.getItem('hazard-dashboard-theme') || 'dark');
+} catch (_) {
+  applyTheme('dark');
+}
+themeButton.addEventListener('click', function() {
+  const next = document.body.classList.contains('light') ? 'dark' : 'light';
+  applyTheme(next);
+  try { localStorage.setItem('hazard-dashboard-theme', next); } catch (_) {}
+});
+
 function colorClass(pct) {
   if (pct < 35) return 'green';
   if (pct < 65) return 'orange';
