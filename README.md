@@ -9,6 +9,19 @@
 
 ---
 
+## Quick project resources
+
+- [Contribution guidelines](CONTRIBUTING.md)
+- [Hardware bring-up and safety checklist](docs/HARDWARE_SETUP.md)
+- [Standalone model evaluation](notebooks/04_evaluate_models.py)
+- [Model plot outputs and provenance](notebooks/plots/README.md)
+
+### Model evaluation
+
+Run `python notebooks/04_evaluate_models.py` from the repository root to create a CNN validation report, confusion-matrix plot, and JSON metrics under `notebooks/plots/`. The CNN result uses the training pipeline's 20% validation split; it is not an independent test-set result. Optional labeled gas and temperature CSVs can be passed with `--gas-csv` and `--temperature-csv`.
+
+The training script generates `notebooks/plots/cnn_training_accuracy.png` when a real training run completes. Evaluation plots and metrics are generated locally and are not committed as if they were measured here.
+
 ## 1. Project Overview
 
 The **Predictive AI Hazard Prevention System** is a multi-layer safety system designed to detect hazardous conditions, combine multiple AI/sensor signals into a single risk decision, provide early-warning prediction, monitor people present in the camera view, and trigger prevention/notification actions.
