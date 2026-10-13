@@ -22,8 +22,11 @@ data/fire_images/
 # Local training dataset - do not commit
 data/fire_dataset/
 
-# Plots
-notebooks/plots/
+# Generated plots and metric outputs are reproducible; review before committing.
+# Keep the folder's instructions tracked, but ignore run-specific outputs by default.
+notebooks/plots/*.png
+notebooks/plots/*.json
+!notebooks/plots/README.md
 
 # OS files
 .DS_Store
