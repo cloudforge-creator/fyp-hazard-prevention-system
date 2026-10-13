@@ -230,27 +230,20 @@ class CNNModel:
             ) >= VISUAL_CONFIRM_FRAMES
         )
 
-        # An unconfirmed color-based cue is diagnostic only. It must not
-        # independently raise the fire probability or trigger an alert.
-        final_prob = cnn_prob
+        # Color alone cannot confirm fire: skin, clothing, lamps, and other
+        # orange/red objects can match this HSV mask. Keep the cue diagnostic
+        # only; never boost the CNN probability or activate the fire override.
+        final_prob = max(0.0, min(1.0, cnn_prob))
 
-        if confirmed_visual:
-            # This is an explicit safety signal, not a claim that the CNN
-            # itself produced 85%. It intentionally activates the existing
-            # DecisionEngine fire override only after temporal confirmation.
-            final_prob = max(final_prob, VISUAL_OVERRIDE_PROB)
-
-        final_prob = max(0.0, min(1.0, final_prob))
-
-        if confirmed_visual:
+        if final_prob >= FIRE_THRESHOLD:
             color = (0, 0, 255)
-            label = f"FIRE {final_prob:.0%}  VISUAL CONFIRMED"
-        elif final_prob >= FIRE_THRESHOLD:
-            color = (0, 0, 255)
-            label = f"FIRE {final_prob:.0%}"
+            label = f"CNN FIRE {final_prob:.0%}"
+        elif confirmed_visual:
+            color = (0, 200, 255)
+            label = f"COLOR CUE ONLY {final_prob:.0%}"
         else:
             color = (0, 200, 0)
-            label = f"SAFE {(1 - final_prob):.0%}"
+            label = f"SAFE {final_prob:.0%}"
 
         cv2.putText(
             frame, label, (10, 35),
