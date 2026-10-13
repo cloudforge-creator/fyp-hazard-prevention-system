@@ -23,7 +23,7 @@ def evaluate_cnn(dataset_dir: Path, model_path: Path, output_dir: Path) -> dict:
     if not (dataset_dir / "fire").is_dir() or not (dataset_dir / "no_fire").is_dir():
         raise FileNotFoundError(f"Expected fire and no_fire folders under {dataset_dir}")
     generator = tf.keras.preprocessing.image.ImageDataGenerator(
-        rescale=1.0 / 255.0, validation_split=0.2
+        preprocessing_function=tf.keras.applications.mobilenet_v2.preprocess_input, validation_split=0.2
     )
     data = generator.flow_from_directory(
         str(dataset_dir), target_size=(224, 224), batch_size=32,
