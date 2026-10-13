@@ -38,6 +38,9 @@ class CNNModel:
         self._sim_t = 0
         self._stop_event = threading.Event()
 
+        # Short temporal filter prevents one noisy camera frame from dominating risk.
+        self._cnn_history = deque(maxlen=3)
+
         # Keep recent visual-fire scores so one noisy frame cannot trigger an alert.
         self._visual_history = deque(maxlen=VISUAL_WINDOW)
 
@@ -203,9 +206,17 @@ class CNNModel:
             # central region separately so resizing does not erase its features.
             roi_prob = self._model_fire_probability(roi)
 
-            cnn_prob = max(full_prob, roi_prob)
+            # Do not take max(full, ROI): max-selection systematically biases
+            # the fire score upward when either pass is uncertain. The full frame
+            # carries most weight; the center ROI contributes supporting evidence.
+            cnn_prob = 0.65 * full_prob + 0.35 * roi_prob
         else:
             cnn_prob = 0.0
+
+        # Median filtering rejects isolated frame spikes while retaining sustained
+        # changes. Physical flame-sensor handling remains independent in the engine.
+        self._cnn_history.append(float(cnn_prob))
+        cnn_prob = float(np.median(list(self._cnn_history)))
 
         visual_score = self._visual_fire_score(frame)
         self._visual_history.append(visual_score)
