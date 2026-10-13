@@ -71,8 +71,10 @@ class CNNModel:
             t.start()
 
     def _init_camera(self):
-        # In --sim mode, do not accidentally use the laptop webcam as live input.
-        if os.environ.get('FYP_SIMULATION', '0') == '1':
+        # Keep the webcam disabled in normal simulation unless explicitly requested.
+        simulation = os.environ.get('FYP_SIMULATION', '0') == '1'
+        camera_enabled = os.environ.get('FYP_CAMERA_ENABLED', '0') == '1'
+        if simulation and not camera_enabled:
             self.cam = None
             self.camera_active = False
             print('[CNNModel] SIMULATION mode - camera disabled; using synthetic fire probability')
