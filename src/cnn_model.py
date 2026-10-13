@@ -210,12 +210,14 @@ class CNNModel:
             ) >= VISUAL_CONFIRM_FRAMES
         )
 
-        final_prob = max(cnn_prob, visual_score)
+        # An unconfirmed color-based cue is diagnostic only. It must not
+        # independently raise the fire probability or trigger an alert.
+        final_prob = cnn_prob
 
         if confirmed_visual:
             # This is an explicit safety signal, not a claim that the CNN
             # itself produced 85%. It intentionally activates the existing
-            # DecisionEngine fire override after temporal confirmation.
+            # DecisionEngine fire override only after temporal confirmation.
             final_prob = max(final_prob, VISUAL_OVERRIDE_PROB)
 
         final_prob = max(0.0, min(1.0, final_prob))
