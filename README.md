@@ -14,6 +14,7 @@
 - [Contribution guidelines](CONTRIBUTING.md)
 - [Hardware bring-up and safety checklist](docs/HARDWARE_SETUP.md)
 - [Standalone model evaluation](notebooks/04_evaluate_models.py)
+- [CNN dataset quality audit](notebooks/05_cnn_quality_audit.py)
 - [Model plot outputs and provenance](notebooks/plots/README.md)
 
 ### Model evaluation
@@ -21,6 +22,12 @@
 Run `python notebooks/04_evaluate_models.py` from the repository root to create a CNN validation report, confusion-matrix plot, and JSON metrics under `notebooks/plots/`. The CNN result uses the training pipeline's 20% validation split; it is not an independent test-set result. Optional labeled gas and temperature CSVs can be passed with `--gas-csv` and `--temperature-csv`.
 
 The training script generates `notebooks/plots/cnn_training_accuracy.png` when a real training run completes. Evaluation plots and metrics are generated locally and are not committed as if they were measured here.
+
+### CNN dataset quality audit
+
+Run `python notebooks/05_cnn_quality_audit.py` from the repository root. It counts readable/unreadable images, reports exact duplicates and perceptual-hash near-duplicate candidates (including cross-class candidates), then evaluates the current CNN on a holdout that keeps detected near-duplicate groups together. It writes `notebooks/plots/cnn_quality_audit.json`.
+
+The audit does not train or replace the model. Perceptual matches are only candidates for manual review. Its grouped holdout comes from the same local dataset and is **not** an external real-world test. Use the report alongside real webcam clips labeled as fire/no-fire before making deployment claims. The dataset and model artifacts may be local and are not assumed to be included in GitHub.
 
 ## 1. Project Overview
 
