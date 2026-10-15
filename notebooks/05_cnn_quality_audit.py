@@ -22,7 +22,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATASET = ROOT / "data" / "fire_dataset"
 DEFAULT_OUTPUT = ROOT / "notebooks" / "plots" / "cnn_quality_audit.json"
-EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".gif"}
+EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".ppm", ".tif", ".tiff"}
 TRAIN_FRACTION = 0.8
 
 
