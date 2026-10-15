@@ -70,9 +70,13 @@ def audit_images(dataset_dir: Path, max_distance: int):
                 continue
             height, width = image.shape[:2]
             digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            try:
+                relative_path = str(path.relative_to(ROOT))
+            except ValueError:
+                relative_path = str(path.resolve())
             records.append({
                 "path": path,
-                "relative_path": str(path.relative_to(ROOT)),
+                "relative_path": relative_path,
                 "label": 0 if class_name == "fire" else 1,
                 "class_name": class_name,
                 "sha256": digest,
@@ -186,6 +190,12 @@ def evaluate_grouped_holdout(records, labels, group_ids, model_path: Path, seed:
     if len(shape) != 4 or shape[-1] != 3:
         raise ValueError(f"Expected a 3-channel image model, got input shape {shape}")
     height, width = int(shape[1]), int(shape[2])
+    output_shape = model.output_shape[0] if isinstance(model.output_shape, list) else model.output_shape
+    if len(output_shape) != 2 or output_shape[-1] != 1:
+        raise ValueError(
+            f"Expected one sigmoid output for the project's fire=0/no_fire=1 convention; "
+            f"got output shape {output_shape}"
+        )
 
     images = []
     kept_indices = []
