@@ -25,7 +25,7 @@ The training script generates `notebooks/plots/cnn_training_accuracy.png` when a
 
 ### CNN dataset quality audit
 
-Run `python notebooks/05_cnn_quality_audit.py` from the repository root. It counts readable/unreadable images, reports exact duplicates and perceptual-hash near-duplicate candidates (including cross-class candidates), then evaluates the current CNN on a holdout that keeps detected near-duplicate groups together. It writes `notebooks/plots/cnn_quality_audit.json`.
+Run `python notebooks/05_cnn_quality_audit.py` from the repository root. It counts readable/unreadable images and reports exact duplicates, perceptual-hash near-duplicate candidates, cross-class candidates, and duplicates crossing the existing train/validation split. It writes `notebooks/plots/cnn_quality_audit.json`.
 
 The audit does not train or replace the model. Perceptual matches are only candidates for manual review. Its grouped holdout comes from the same local dataset and is **not** an external real-world test. Use the report alongside real webcam clips labeled as fire/no-fire before making deployment claims. The dataset and model artifacts may be local and are not assumed to be included in GitHub.
 
