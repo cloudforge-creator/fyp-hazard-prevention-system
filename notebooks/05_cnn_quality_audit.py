@@ -62,11 +62,23 @@ def audit_images(dataset_dir: Path, max_distance: int) -> dict:
     valid_counts = {}
     dimensions = Counter()
 
-    # Match the project's alphabetical class mapping and per-class filename split.
-    for class_name, label in (("fire", 0), ("no_fire", 1)):
-        folder = dataset_dir / class_name
-        if not folder.is_dir():
-            raise FileNotFoundError(f"Required class folder is missing: {folder}")
+    # Accept common names for the no-fire class while keeping the model label
+    # consistent with Keras' alphabetical mapping: fire=0, no_fire=1.
+    class_folders = (
+        ("fire", 0, ("fire",)),
+        ("no_fire", 1, ("no_fire", "nofire", "no-fire", "non_fire", "non-fire")),
+    )
+    for class_name, label, folder_names in class_folders:
+        folder = next(
+            (dataset_dir / name for name in folder_names if (dataset_dir / name).is_dir()),
+            None,
+        )
+        if folder is None:
+            expected = ", ".join(str(dataset_dir / name) for name in folder_names)
+            raise FileNotFoundError(
+                f"Required class folder for '{class_name}' is missing. Checked: {expected}"
+            )
+        print(f"Scanning class '{class_name}' in: {folder}")
         paths = sorted(
             p for p in folder.rglob("*")
             if p.is_file() and p.suffix.lower() in EXTENSIONS
@@ -76,6 +88,8 @@ def audit_images(dataset_dir: Path, max_distance: int) -> dict:
         valid_counts[class_name] = 0
 
         for index, path in enumerate(paths):
+            if index > 0 and index % 500 == 0:
+                print(f"  {class_name}: checked {index:,}/{len(paths):,} files...")
             image = read_image(path)
             if image is None:
                 unreadable.append(display_path(path))
@@ -117,33 +131,57 @@ def audit_images(dataset_dir: Path, max_distance: int) -> dict:
                         "split_b": records[j]["split"],
                     })
 
-    # Pairwise perceptual-hash comparison. Similarity is a review signal, not
-    # proof of duplicate content or a labeling error.
-    hashes = [r["phash"] for r in records]
+    # Vectorized pairwise perceptual-hash comparison. This avoids millions of
+    # Python-level comparisons on datasets containing several thousand images.
+    # Similarity is a review signal, not proof of duplicate content or bad labels.
+    hashes = np.asarray([r["phash"] for r in records], dtype=np.uint64)
+    popcount = np.asarray([int(value).bit_count() for value in range(256)], dtype=np.uint8)
     near_pairs = 0
+    near_cross_split_count = 0
+    near_cross_class_count = 0
     near_cross_split = []
     near_cross_class = []
-    print(f"Comparing perceptual hashes for {len(records):,} readable images...")
-    for i in range(len(records)):
-        for j in range(i + 1, len(records)):
-            distance = (hashes[i] ^ hashes[j]).bit_count()
-            if distance > max_distance:
-                continue
+    total = len(records)
+    block_size = 128
+    print(f"Comparing perceptual hashes for {total:,} readable images (vectorized)...")
+    for start in range(0, total, block_size):
+        end = min(start + block_size, total)
+        xor_values = np.bitwise_xor(hashes[start:end, None], hashes[None, :])
+        distances = popcount[xor_values.view(np.uint8).reshape(end - start, total, 8)].sum(axis=2)
+        row_indices, col_indices = np.where(
+            (distances <= max_distance)
+            & (np.arange(start, end)[:, None] < np.arange(total)[None, :])
+        )
+        near_pairs += len(row_indices)
+        for local_i, j in zip(row_indices.tolist(), col_indices.tolist()):
+            i = start + local_i
             a, b = records[i], records[j]
-            near_pairs += 1
-            pair = {
-                "distance": distance,
-                "image_a": a["relative_path"],
-                "image_b": b["relative_path"],
-                "class_a": a["class_name"],
-                "class_b": b["class_name"],
-                "split_a": a["split"],
-                "split_b": b["split"],
-            }
+            distance = int(distances[local_i, j])
             if a["split"] != b["split"]:
-                near_cross_split.append(pair)
+                near_cross_split_count += 1
+                if len(near_cross_split) < 50:
+                    near_cross_split.append({
+                        "distance": distance,
+                        "image_a": a["relative_path"],
+                        "image_b": b["relative_path"],
+                        "class_a": a["class_name"],
+                        "class_b": b["class_name"],
+                        "split_a": a["split"],
+                        "split_b": b["split"],
+                    })
             if a["label"] != b["label"]:
-                near_cross_class.append(pair)
+                near_cross_class_count += 1
+                if len(near_cross_class) < 50:
+                    near_cross_class.append({
+                        "distance": distance,
+                        "image_a": a["relative_path"],
+                        "image_b": b["relative_path"],
+                        "class_a": a["class_name"],
+                        "class_b": b["class_name"],
+                        "split_a": a["split"],
+                        "split_b": b["split"],
+                    })
+        print(f"  Compared rows {end:,}/{total:,}...")
 
     exact_cross_class_groups = [
         items for items in exact_duplicate_groups
@@ -168,13 +206,13 @@ def audit_images(dataset_dir: Path, max_distance: int) -> dict:
         "exact_duplicate_groups_with_cross_class_labels": len(exact_cross_class_groups),
         "phash_distance_threshold": max_distance,
         "near_duplicate_pairs": near_pairs,
-        "near_duplicate_pairs_crossing_train_validation": len(near_cross_split),
+        "near_duplicate_pairs_crossing_train_validation": near_cross_split_count,
         "near_duplicate_cross_split_examples": near_cross_split[:50],
-        "near_duplicate_pairs_with_cross_class_labels": len(near_cross_class),
+        "near_duplicate_pairs_with_cross_class_labels": near_cross_class_count,
         "near_duplicate_cross_class_examples": near_cross_class[:50],
         "image_dimensions_top_20": dimensions.most_common(20),
         "training_split_reconstruction": (
-            "Sorted filenames within each class; first 80% train and final 20% validation. "
+            "Sorted filenames within each class folder; first 80% train and final 20% validation. "
             "This mirrors the project's flow_from_directory(validation_split=0.2) intent; "
             "confirm against the installed Keras version if exact membership is critical."
         ),
