@@ -66,7 +66,11 @@ def audit_images(dataset_dir: Path, max_distance: int):
         for path in paths:
             image = read_image(path)
             if image is None:
-                unreadable.append(str(path.relative_to(ROOT)))
+                try:
+                    unreadable_path = str(path.relative_to(ROOT))
+                except ValueError:
+                    unreadable_path = str(path.resolve())
+                unreadable.append(unreadable_path)
                 continue
             height, width = image.shape[:2]
             digest = hashlib.sha256(path.read_bytes()).hexdigest()
