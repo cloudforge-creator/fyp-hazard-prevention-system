@@ -16,8 +16,22 @@ from collections import deque
 MODEL_PATH = 'models/cnn_fire_model.h5'
 IMG_SIZE = (224, 224)
 
-# Display threshold only. The safety override remains in decision_engine.py.
+# Display thresholds for the CNN-only overlay; overall risk is still fused by DecisionEngine.
 FIRE_THRESHOLD = 0.50
+CNN_WARNING_THRESHOLD = 0.35
+CNN_CRITICAL_THRESHOLD = 0.65
+
+
+def classify_cnn_status(fire_probability):
+    """Return a camera-overlay status for P(fire), not P(no_fire)."""
+    if fire_probability is None:
+        return "UNAVAILABLE"
+    if fire_probability >= CNN_CRITICAL_THRESHOLD:
+        return "CRITICAL"
+    if fire_probability >= CNN_WARNING_THRESHOLD:
+        return "WARNING"
+    return "SAFE"
+
 
 # Camera-domain robustness settings.
 ROI_SCALE = 0.70
@@ -35,6 +49,7 @@ class CNNModel:
         self._latest_frame = None
         self._frame_lock = threading.Lock()
         self._fire_prob = None
+        self._cnn_prob = None  # raw model-only probability; None when model/camera unavailable
         self._sim_t = 0
         self._stop_event = threading.Event()
 
@@ -112,16 +127,18 @@ class CNNModel:
                 if not ret or frame is None:
                     with self._frame_lock:
                         self._fire_prob = None
+                        self._cnn_prob = None
                         self._latest_frame = None
                     time.sleep(0.2)
                     continue
 
-                prob, annotated = self._infer(frame)
+                signal_prob, cnn_prob, annotated = self._infer(frame)
                 annotated, persons = self.person_recognizer.annotate_frame(annotated)
 
                 with self._frame_lock:
                     self._latest_frame = annotated
-                    self._fire_prob = prob
+                    self._fire_prob = signal_prob
+                    self._cnn_prob = cnn_prob
                     self._current_persons = persons
 
             except Exception as e:
@@ -199,7 +216,8 @@ class CNNModel:
 
         roi, roi_box = self._center_crop(frame)
 
-        if self.model_loaded:
+        model_available = self.model_loaded
+        if model_available:
             full_prob = self._model_fire_probability(frame)
 
             # A flame can be small in the complete webcam image. Evaluate the
@@ -215,8 +233,11 @@ class CNNModel:
 
         # Median filtering rejects isolated frame spikes while retaining sustained
         # changes. Physical flame-sensor handling remains independent in the engine.
-        self._cnn_history.append(float(cnn_prob))
-        cnn_prob = float(np.median(list(self._cnn_history)))
+        if model_available:
+            self._cnn_history.append(float(cnn_prob))
+            cnn_prob = float(np.median(list(self._cnn_history)))
+        else:
+            self._cnn_history.clear()
 
         visual_score = self._visual_fire_score(frame)
         self._visual_history.append(visual_score)
@@ -235,34 +256,39 @@ class CNNModel:
         # only; never boost the CNN probability or activate the fire override.
         final_prob = max(0.0, min(1.0, cnn_prob))
 
-        if final_prob >= FIRE_THRESHOLD:
-            color = (0, 0, 255)
-            label = f"CNN FIRE {final_prob:.0%}"
-        elif confirmed_visual:
-            color = (0, 200, 255)
-            label = f"COLOR CUE ONLY {final_prob:.0%}"
+        if not model_available:
+            color = (0, 165, 255)
+            label = "CNN MODEL UNAVAILABLE"
         else:
-            color = (0, 200, 0)
-            label = f"SAFE {final_prob:.0%}"
+            status = classify_cnn_status(cnn_prob)
+            color = {
+                "SAFE": (0, 200, 0),
+                "WARNING": (0, 165, 255),
+                "CRITICAL": (0, 0, 255),
+            }[status]
+            cue_text = " | COLOR CUE" if confirmed_visual else ""
+            label = f"{status} | CNN FIRE {cnn_prob:.0%}{cue_text}"
 
         cv2.putText(
             frame, label, (10, 35),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.85, color, 2
+            cv2.FONT_HERSHEY_SIMPLEX, 0.68, color, 2
         )
-        cv2.rectangle(frame, (5, 5), (470, 52), color, 2)
+        cv2.rectangle(frame, (5, 5), (min(frame.shape[1] - 5, 700), 52), color, 2)
 
         # Show the center ROI used by the second CNN pass.
         x1, y1, x2, y2 = roi_box
         cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 180, 0), 1)
 
         # Keep a compact diagnostic line on the camera feed.
-        diag = f"CNN:{cnn_prob:.0%} Visual:{visual_score:.0%}"
+        diag = f"CNN fire:{cnn_prob:.0%} | color cue:{visual_score:.0%} (not a probability)"
         cv2.putText(
             frame, diag, (10, 78),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1
+            cv2.FONT_HERSHEY_SIMPLEX, 0.48, (255, 255, 255), 1
         )
 
-        return round(final_prob, 3), frame
+        # The dashboard gets model-only P(fire); color cue remains diagnostic only.
+        displayed_cnn_prob = round(cnn_prob, 3) if model_available else None
+        return round(final_prob, 3), displayed_cnn_prob, frame
 
     def predict(self):
         if not self.camera_active:
@@ -276,6 +302,11 @@ class CNNModel:
             return 0.0, None
 
         return probability, frame
+
+    def get_cnn_probability(self):
+        """Return latest model-only P(fire), or None when unavailable."""
+        with self._frame_lock:
+            return self._cnn_prob
 
     def get_current_persons(self):
         return self.person_recognizer.get_current_presence()
@@ -348,6 +379,10 @@ def predict_fire():
 
 def get_jpeg_frame():
     return get_cnn_model().get_jpeg_frame()
+
+
+def get_cnn_probability():
+    return get_cnn_model().get_cnn_probability()
 
 
 def get_current_persons():
