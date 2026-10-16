@@ -29,6 +29,7 @@ jobs:
           python -m py_compile notebooks/06_build_cnn_split_manifest.py
           python -m py_compile notebooks/07_train_cnn_manifest.py
           python -m py_compile notebooks/08_evaluate_cnn_manifest.py
+          python -m py_compile notebooks/09_evaluate_cnn_unseen_photos.py
 
       - name: Run unit tests
         env:

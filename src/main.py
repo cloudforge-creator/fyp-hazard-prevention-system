@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.arduino_reader  import ArduinoReader
 from src.gas_model       import predict_gas
 from src.lstm_model      import predict_anomaly
-from src.cnn_model       import predict_fire, get_jpeg_frame, get_current_persons, get_cnn_model
+from src.cnn_model       import predict_fire, get_jpeg_frame, get_cnn_probability, get_current_persons, get_cnn_model
 from src.decision_engine import DecisionEngine
 from src.predictive_logger import PredictiveDataLogger
 from src.firebase_handler import FirebaseHandler
@@ -88,7 +88,8 @@ def sensor_loop(arduino: ArduinoReader,
                 temp or 25.0)
 
             # Model 3: CNN fire detection
-            fire_prob, _ = predict_fire()
+            fire_prob, _ = predict_fire()  # signal used by the decision engine
+            cnn_probability = get_cnn_probability()  # raw model-only P(fire) for dashboard
             current_people = get_current_persons()
 
             # ---- Step 3: Decision Engine fusion ----
@@ -110,7 +111,9 @@ def sensor_loop(arduino: ArduinoReader,
                 'gas_risk':    gas_risk,
                 'temperature': temp,
                 'humidity':    humidity,
-                'fire_prob':   fire_prob,
+                'fire_prob':   cnn_probability,
+                'fire_signal_prob': fire_prob,
+                'cnn_model_available': cnn_probability is not None,
                 'temp_anomaly':temp_anomaly,
                 'temp_error':  temp_error,
                 'risk_level':  result['level'],
