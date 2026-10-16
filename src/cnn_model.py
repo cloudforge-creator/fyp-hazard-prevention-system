@@ -143,6 +143,10 @@ class CNNModel:
 
             except Exception as e:
                 print(f"[CNNModel] Capture error: {e}")
+                with self._frame_lock:
+                    self._fire_prob = None
+                    self._cnn_prob = None
+                    self._latest_frame = None
                 time.sleep(1)
 
     def _model_fire_probability(self, image):
@@ -355,6 +359,7 @@ class CNNModel:
         with self._frame_lock:
             self._latest_frame = None
             self._fire_prob = None
+            self._cnn_prob = None
             self._current_persons = []
 
 
