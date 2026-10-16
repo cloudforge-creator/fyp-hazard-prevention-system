@@ -58,7 +58,7 @@ def add_event(result: dict):
             'level': result.get('level', ''),
             'gas':   result.get('gas', ''),
             'score': result.get('score', 0),
-            'fire':  result.get('fire_signal_prob', result.get('fire_prob', 0)),
+            'fire_prob': result.get('fire_signal_prob', result.get('fire_prob', 0)),
             'people': result.get('current_people', []),
             'predicted_level': result.get('predicted_level', result.get('level', '')),
             'response_level': result.get('response_level', result.get('level', '')),
