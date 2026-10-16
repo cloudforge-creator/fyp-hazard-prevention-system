@@ -95,10 +95,16 @@ class DecisionEngineTests(unittest.TestCase):
         self.assertEqual(result["score"], 1.0)
         self.assertEqual(self.arduino.relay_activations, 1)
 
-    def test_high_cnn_probability_is_immediate_critical_override(self):
-        result = self.evaluate(fire_prob=0.80)
-        self.assertEqual(result["level"], "CRITICAL")
-        self.assertEqual(result["method"], "cnn_override")
+    def test_high_cnn_probability_requires_three_consecutive_readings(self):
+        first = self.evaluate(fire_prob=0.80)
+        second = self.evaluate(fire_prob=0.85)
+        self.assertNotEqual(first["level"], "CRITICAL")
+        self.assertNotEqual(second["level"], "CRITICAL")
+        self.assertEqual(self.arduino.relay_activations, 0)
+
+        third = self.evaluate(fire_prob=0.90)
+        self.assertEqual(third["level"], "CRITICAL")
+        self.assertEqual(third["method"], "cnn_override")
         self.assertEqual(self.arduino.relay_activations, 1)
 
     def test_current_people_are_preserved_in_result(self):

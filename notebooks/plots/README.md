@@ -1,11 +1,11 @@
 # Model evaluation plots
 
-Plots in this folder must be generated from actual model runs, not fabricated example metrics.
+## Current CNN retraining workflow
 
-From the repository root:
+For duplicate-aware, leakage-safe CNN experiments, follow [CNN_TRAINING_WORKFLOW.md](../CNN_TRAINING_WORKFLOW.md). Use the manifest builder, candidate trainer, and held-out test evaluator described there.
 
-    python notebooks/04_evaluate_models.py
+The legacy `03_train_cnn_model.py` and `04_evaluate_models.py` use Keras' directory `validation_split=0.2`; do not use their results as the final independent test score for the duplicate-audited dataset.
 
-This writes cnn_confusion_matrix.png, cnn_evaluation.json and evaluation_summary.json when the CNN model and dataset are present. The CNN training script also writes cnn_training_accuracy.png and its confusion matrix after training.
+Plots and metric JSON files must be generated from actual model runs, not fabricated example metrics. Keep dataset provenance and split details alongside results. Validation metrics must not be presented as independent test accuracy.
 
-Optional labeled gas and temperature datasets can be evaluated with --gas-csv and --temperature-csv. Keep dataset provenance and split details alongside results. Validation metrics must not be presented as independent test accuracy.
+Optional labeled gas and temperature datasets can be evaluated with `04_evaluate_models.py --gas-csv` and `--temperature-csv`. The CNN candidate workflow does not replace real-world validation on unseen camera footage.

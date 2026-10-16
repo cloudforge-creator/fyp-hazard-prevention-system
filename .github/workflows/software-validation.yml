@@ -24,6 +24,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Compile CNN workflow scripts
+        run: |
+          python -m py_compile notebooks/06_build_cnn_split_manifest.py
+          python -m py_compile notebooks/07_train_cnn_manifest.py
+          python -m py_compile notebooks/08_evaluate_cnn_manifest.py
+
       - name: Run unit tests
         env:
           PYTHONPATH: .
