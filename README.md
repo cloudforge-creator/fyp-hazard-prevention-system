@@ -341,14 +341,7 @@ The implementation also contains additional visual processing:
 - temporal visual confirmation
 - camera frame annotation
 
-Relevant saved model artifacts include:
-
-```
-models/cnn_fire_model.h5
-models/cnn_fire_best.h5
-models/cnn_fire_weights.h5
-models/cnn_fire_architecture.json
-```
+The runtime loads the active model from `models/cnn_fire_model.h5`. Older duplicate checkpoints, standalone weights, and the exported architecture JSON were removed from the repository to avoid ambiguity about which model is deployed. Retraining artifacts and evaluation outputs should be kept outside the runtime model directory unless they are explicitly needed for reproducibility.
 
 The visual signal is treated as a safety input to the decision engine rather than as a claim of perfectly calibrated probability.
 
@@ -863,11 +856,7 @@ fyp-hazard-prevention-system/
 ├── CONTRIBUTING.md
 │
 ├── models/
-│   ├── cnn_fire_architecture.json
-│   ├── cnn_fire_best.h5
 │   ├── cnn_fire_model.h5
-│   ├── cnn_fire_model_backup.h5
-│   ├── cnn_fire_weights.h5
 │   ├── gas_labels.pkl
 │   ├── gas_rf_model.pkl
 │   ├── gas_scaler.pkl

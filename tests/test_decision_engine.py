@@ -106,6 +106,7 @@ class DecisionEngineTests(unittest.TestCase):
         self.assertEqual(third["level"], "CRITICAL")
         self.assertEqual(third["method"], "cnn_override")
         self.assertEqual(self.arduino.relay_activations, 1)
+        self.assertEqual(self.arduino.relay_activations, 1)
 
     def test_current_people_are_preserved_in_result(self):
         people = [{"person_id": "ahad", "name": "Ahad", "designation": "Student"}]
