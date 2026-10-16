@@ -201,7 +201,7 @@
         <thead>
           <tr>
             <th>Time</th><th>Level</th><th>Gas</th>
-            <th>Risk score</th><th>Fire prob</th><th>People present</th>
+            <th>Risk score</th><th>Fire signal</th><th>People present</th>
           </tr>
         </thead>
         <tbody id="event-tbody">
@@ -292,9 +292,10 @@ function pollData() {
       document.getElementById('humidity').textContent =
           d.humidity != null ? d.humidity.toFixed(1) + '%' : '—';
 
-      const fp = Math.round((d.fire_prob || 0) * 100);
-      document.getElementById('fire-prob').textContent = fp + '%';
-      setBar('fire-bar', fp);
+      const hasCnnProbability = typeof d.fire_prob === 'number' && Number.isFinite(d.fire_prob);
+      const fp = hasCnnProbability ? Math.round(d.fire_prob * 100) : null;
+      document.getElementById('fire-prob').textContent = hasCnnProbability ? fp + '%' : '—';
+      setBar('fire-bar', hasCnnProbability ? fp : 0);
 
       const predicted = d.predicted_score || 0;
       const predictedPct = Math.round(predicted * 100);
@@ -318,7 +319,7 @@ function pollData() {
 
       // Model scores
       document.getElementById('cnn-score').textContent =
-          ((d.fire_prob || 0) * 100).toFixed(1) + '%';
+          hasCnnProbability ? (d.fire_prob * 100).toFixed(1) + '%' : 'Unavailable';
       document.getElementById('rf-score').textContent =
           ((d.gas_risk || 0) * 100).toFixed(1) + '%';
       document.getElementById('lstm-score').textContent =
