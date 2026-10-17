@@ -1,874 +1,125 @@
 # Predictive AI Hazard Prevention System
 
-## Final Year Project — AI-Based Real-Time Hazard Detection, Prediction & Prevention
+**Final Year Project (FYP) — software implementation and software-only demonstration**
 
-> **Project type:** Final Year Project (FYP)  
-> **Primary software stack:** Python, TensorFlow/Keras, Scikit-learn, OpenCV, Flask, Firebase, Docker, GitHub Actions  
-> **Embedded layer:** Arduino + MQ-2 + DHT22 + flame sensor + relay  
-> **Repository:** `cloudforge-creator/fyp-hazard-prevention-system`
+This repository contains the software for a predictive hazard-monitoring prototype that combines gas classification, temperature anomaly detection, camera-based fire detection, risk fusion, short-horizon trend forecasting, person presence/recognition, event handling, a Flask dashboard, and simulation/testing infrastructure.
 
----
+**Software-scope status:** The planned software modules and their integration are documented as the project's software deliverable. Hardware commissioning and laboratory validation are separate activities. This status does **not** mean the repository is production-certified, that every optional external service is configured, or that model accuracy has been independently certified.
 
-## Quick project resources
+## Project team
 
-- [Contribution guidelines](CONTRIBUTING.md)
-- [Hardware bring-up and safety checklist](docs/HARDWARE_SETUP.md)
-- [Standalone model evaluation](notebooks/04_evaluate_models.py)
-- [CNN dataset quality audit](notebooks/05_cnn_quality_audit.py)
-- [Model plot outputs and provenance](notebooks/plots/README.md)
+- Muhammad Ahad
+- Muhammad Wajdan
+- Muqaddar Hayat
 
-### Model evaluation
-
-Run `python notebooks/04_evaluate_models.py` from the repository root to create a CNN validation report, confusion-matrix plot, and JSON metrics under `notebooks/plots/`. The CNN result uses the training pipeline's 20% validation split; it is not an independent test-set result. Optional labeled gas and temperature CSVs can be passed with `--gas-csv` and `--temperature-csv`.
-
-The training script generates `notebooks/plots/cnn_training_accuracy.png` when a real training run completes. Evaluation plots and metrics are generated locally and are not committed as if they were measured here.
-
-### CNN dataset quality audit
-
-Run `python notebooks/05_cnn_quality_audit.py` from the repository root. It counts readable/unreadable images and reports exact duplicates, perceptual-hash near-duplicate candidates, cross-class candidates, and duplicates crossing the existing train/validation split. It writes `notebooks/plots/cnn_quality_audit.json`.
-
-The audit does not train or replace the model. Perceptual matches are only candidates for manual review. Its grouped holdout comes from the same local dataset and is **not** an external real-world test. Use the report alongside real webcam clips labeled as fire/no-fire before making deployment claims. The dataset and model artifacts may be local and are not assumed to be included in GitHub.
-
-## 1. Project Overview
-
-The **Predictive AI Hazard Prevention System** is a multi-layer safety system designed to detect hazardous conditions, combine multiple AI/sensor signals into a single risk decision, provide early-warning prediction, monitor people present in the camera view, and trigger prevention/notification actions.
-
-The software pipeline is:
-
-```
-Sensors + Camera
-       |
-       v
-Data Acquisition
-       |
-       +------------------+------------------+
-       |                  |                  |
-       v                  v                  v
-   Gas RF Model       LSTM Temperature    CNN Fire Model
-       |                  |                  |
-       +------------------+------------------+
-                          |
-                          v
-                 Decision Engine
-                          |
-              +-----------+-----------+
-              |                       |
-              v                       v
-       Current Risk             Predictive Risk
-       SAFE/WARNING/            Trend / Early
-       CRITICAL                 Warning / Forecast
-              |                       |
-              +-----------+-----------+
-                          |
-                          v
-                 Response Layer
-             +------------+------------+
-             |            |            |
-             v            v            v
-          Relay       Firebase     Dashboard
-          Control     Events/FCM    + Camera
-                          |
-                          v
-                   Person Presence
-                   + Event Correlation
-```
-
-The system is intentionally designed so that **simulation mode can run the complete software pipeline without physical hardware**.
+**Supervisor:** Mr. Hamid Nawaz  
+**Department:** Software Engineering, NUML Faisalabad Campus
 
 ---
 
-# 2. Main Objectives
-
-The project software is built to:
-
-1. Read environmental sensor data.
-2. Detect/classify gas-related risk.
-3. Detect temperature anomalies.
-4. Detect visible fire using computer vision.
-5. Detect and recognize people locally from the camera stream.
-6. Fuse multiple model outputs into one risk score.
-7. Classify the current state as **SAFE**, **WARNING**, or **CRITICAL**.
-8. Forecast short-term risk using temporal trends.
-9. Generate early-warning information before risk becomes critical.
-10. Activate the relay response when a critical condition is detected.
-11. Store live/event information in Firebase when configured.
-12. Send Firebase Cloud Messaging alerts when configured.
-13. Display live data, events, risk state, and camera output through a Flask dashboard.
-14. Provide software validation through automated tests, Docker build validation, and end-to-end simulation.
-
----
-
-# 3. Technology Stack
-
-| Layer | Technology | Purpose |
-|---|---|---|
-| Programming | Python 3.10 | Main application and AI pipeline |
-| ML/DL | TensorFlow 2.13 / Keras | CNN and LSTM models |
-| ML | Scikit-learn | Random Forest gas classification |
-| Data | NumPy, Pandas, SciPy | Numerical processing and datasets |
-| Computer Vision | OpenCV + opencv-contrib | Fire detection, camera processing, face recognition |
-| Web | Flask | Real-time monitoring dashboard and REST endpoints |
-| Database/Cloud | Firebase Realtime Database | Live data and event storage |
-| Notifications | Firebase Cloud Messaging | Push notifications |
-| Hardware interface | PySerial | Python ↔ Arduino serial communication |
-| Embedded | Arduino C/C++ | Sensor acquisition and relay control |
-| Packaging | Docker | Reproducible software environment |
-| Testing | Pytest | Unit tests |
-| CI | GitHub Actions | Automated software validation |
-| Version control | Git + GitHub | Source control and collaboration |
-
----
-
-# 4. Project Development Flow — From Scratch to End
-
-## Phase 1 — Requirements and System Design
-
-The first stage was to define the safety problem and divide the system into software and embedded components.
-
-### Main software modules
-
-- Sensor data acquisition
-- Gas classification
-- Temperature anomaly detection
-- Fire detection
-- Person recognition/presence
-- Multi-model decision engine
-- Predictive risk assessment
-- Firebase integration
-- Flask dashboard
-- Event logging
-- Relay response
-- Testing and CI
-
-### Main design principle
-
-Instead of relying on one AI model, the system combines independent signals:
-
-```
-Gas Risk
-   +
-Temperature Anomaly
-   +
-Fire Probability
-   +
-Flame Signal
-   |
-   v
-Multi-Model Decision Engine
-   |
-   v
-Unified Hazard Decision
-```
-
----
-
-# 5. Phase 2 — Data Acquisition
-
-The embedded side is represented by Arduino.
-
-The Arduino sketch is:
-
-```
-arduino/hazard_sensors.ino
-```
-
-It is designed for:
-
-- MQ-2 gas sensor
-- DHT22 temperature/humidity sensor
-- Flame sensor
-- Relay
-
-The Arduino sends sensor values through serial communication.
-
-Python receives those values through:
-
-```
-pyserial
-```
-
-The Python communication layer is:
-
-```
-src/arduino_reader.py
-```
-
-### Sensor data flow
-
-```
-MQ-2 ------------------+
-DHT22 -----------------+--> Arduino --> Serial --> Python
-Flame Sensor -----------+
-Relay <-----------------+
-```
-
-The reader also supports **simulation mode**, which allows development and testing without an Arduino.
-
----
-
-# 6. Phase 3 — Gas AI Model
-
-## Random Forest Gas Classification
-
-File:
-
-```
-src/gas_model.py
-```
-
-Training script:
-
-```
-notebooks/01_train_gas_model.py
-```
-
-The gas pipeline uses the MQ-2 sensor's gas ratio as an important feature.
-
-Runtime features include:
-
-- gas ratio
-- ratio squared
-- inverse ratio
-- logarithm of ratio
-- approximate ADC value
-
-The trained model and preprocessing artifacts are stored under:
-
-```
-models/
-```
-
-Important files include:
-
-```
-models/gas_rf_model.pkl
-models/gas_scaler.pkl
-models/gas_labels.pkl
-```
-
-The model produces:
-
-```
-gas_label
-gas_risk
-```
-
-Example gas categories represented in the implementation include:
-
-- clean air
-- smoke
-- LPG
-- methane
-- CO
-- hydrogen
-- alcohol
-
-A rule-based fallback is also implemented when trained model files are unavailable.
-
----
-
-# 7. Phase 4 — Temperature AI Model
-
-## LSTM Temperature Anomaly Detection
-
-File:
-
-```
-src/lstm_model.py
-```
-
-Training script:
-
-```
-notebooks/02_train_lstm_model.py
-```
-
-The LSTM model processes temperature history and identifies abnormal temperature behavior.
-
-The runtime uses the trained model together with preprocessing/threshold artifacts:
-
-```
-models/lstm_temp_model.h5
-models/lstm_scaler.pkl
-models/lstm_threshold.pkl
-```
-
-The result contributes:
-
-```
-temp_anomaly
-temp_error
-```
-
-During startup, the model needs historical readings before a meaningful temporal assessment is available.
-
----
-
-# 8. Phase 5 — CNN Fire Detection
-
-## MobileNetV2-Based Fire Detection
-
-File:
-
-```
-src/cnn_model.py
-```
-
-Training script:
-
-```
-notebooks/03_train_cnn_model.py
-```
-
-The computer-vision component uses TensorFlow/Keras and MobileNetV2.
-
-Input size:
-
-```
-224 x 224
-```
-
-The model distinguishes:
-
-- fire
-- no fire
-
-The implementation also contains additional visual processing:
-
-- center ROI analysis
-- HSV flame-colored pixel detection
-- connected-component analysis
-- temporal visual confirmation
-- camera frame annotation
-
-The runtime loads the active model from `models/cnn_fire_model.h5`. Older duplicate checkpoints, standalone weights, and the exported architecture JSON were removed from the repository to avoid ambiguity about which model is deployed. Retraining artifacts and evaluation outputs should be kept outside the runtime model directory unless they are explicitly needed for reproducibility.
-
-The visual signal is treated as a safety input to the decision engine rather than as a claim of perfectly calibrated probability.
-
----
-
-# 9. Phase 6 — Person Presence and Recognition
-
-File:
-
-```
-src/person_recognition.py
-```
-
-The camera pipeline also supports local person presence.
-
-Technology:
-
-- OpenCV
-- Haar cascade face detection
-- OpenCV LBPH face recognition
-
-The system can:
-
-1. Detect visible faces.
-2. Recognize registered people locally.
-3. Label unknown/unregistered people.
-4. Track active presence.
-5. Expire presence when a person leaves the view.
-6. Attach people visible at the time of a warning/critical event.
-
-Person registration is available through the dashboard.
-
-### API
-
-```
-POST /persons/register
-GET  /persons
-```
-
-Local biometric files are intentionally kept outside the public source-control workflow.
-
-The system records **presence in the monitored camera view**. It does not calculate an exact physical distance from a person to the hazard.
-
----
-
-# 10. Phase 7 — Multi-Model Decision Engine
-
-File:
-
-```
-src/decision_engine.py
-```
-
-This is the central decision-making component and the project's custom software contribution.
-
-The engine combines:
-
-- CNN fire probability
-- Random Forest gas risk
-- LSTM temperature anomaly/error
-
-### Fusion weights
-
-```
-CNN fire       = 0.50
-RF gas         = 0.35
-LSTM temp      = 0.15
-```
-
-The weighted score is conceptually:
-
-```
-Risk Score =
-    (CNN × 0.50)
-  + (Gas × 0.35)
-  + (Temperature × 0.15)
-```
-
-### Risk thresholds
-
-```
-0.00 – <0.35  -> SAFE
-0.35 – <0.65  -> WARNING
-0.65 – 1.00   -> CRITICAL
-```
-
-High-risk gas categories receive an additional risk boost in the implemented logic.
-
-### Immediate fire override
-
-The engine can bypass normal weighted fusion and immediately classify the state as critical when:
-
-- the physical flame signal is active, or
-- CNN fire probability reaches the configured override threshold.
-
----
-
-# 11. Phase 8 — Predictive Risk / Early Warning
-
-File:
-
-```
-src/predictive_risk.py
-```
-
-The project includes a short-horizon temporal risk forecaster.
-
-It keeps a rolling history of:
-
-- gas score
-- temperature score
-- fire score
-
-The current implementation:
-
-1. Collects recent readings.
-2. Calculates temporal slopes using least-squares regression.
-3. Projects the signals forward.
-4. Calculates predicted risk.
-5. Classifies the predicted state.
-6. Determines whether the trend is rising, stable, or falling.
-7. Generates an early-warning condition when appropriate.
-
-Configured horizon:
-
-```
-History: 30 seconds
-Forecast: 30 seconds
-Sampling interval: approximately 0.5 seconds
-```
-
-### Important scientific scope
-
-This component is a **short-horizon predictive risk / early-warning forecaster**. It does not claim to predict an exact future fire time.
-
-A future research version could replace this trend forecaster with a supervised future-hazard model after collecting sufficient timestamped and labeled hazard-transition data.
-
----
-
-# 12. Phase 9 — Response and Prevention Layer
-
-When the Decision Engine detects a critical condition, the response layer can:
-
-### 1. Activate relay
-
-```
-CRITICAL
-   |
-   v
-ArduinoReader.activate_relay()
-   |
-   v
-RELAY:ON
-```
-
-In simulation mode, the system prints that machine power would be cut instead of controlling physical hardware.
-
-### 2. Send Firebase alert
-
-When Firebase is configured, the system sends an alert through the Firebase handler.
-
-### 3. Log hazard event
-
-The event can contain:
-
-- timestamp
-- risk level
-- score
-- gas
-- fire probability
-- temperature information
-- predicted level
-- trend
-- people present
-
-Warning and critical alerts are rate-limited by cooldown logic.
-
-The dashboard also provides:
-
-```
-POST /reset_relay
-```
-
-for manual relay reset after the hazard has cleared.
-
----
-
-# 13. Phase 10 — Firebase Cloud Integration
-
-File:
-
-```
-src/firebase_handler.py
-```
-
-Firebase is used for cloud-connected monitoring and notification.
-
-The implementation supports storing information such as:
-
-```
-/persons
-/live_presence
-/live_sensors
-/events
-```
-
-### Firebase responsibilities
-
-- Live sensor state
-- Live person presence
-- Hazard event history
-- Person metadata
-- Push notification delivery
-
-### Configuration
-
-Firebase credentials are intentionally not committed to the repository.
-
-Typical configuration includes:
-
-- Firebase service account credentials
-- Realtime Database URL
-- Web Firebase configuration
-- FCM/VAPID configuration
-
-For development and software testing, Firebase can be disabled or simulated.
-
----
-
-# 14. Phase 11 — Flask Web Dashboard
-
-Main dashboard file:
-
-```
-dashboard/app.py
-```
-
-The dashboard is served by Flask.
-
-Default address:
-
-```
-http://localhost:5000
-```
-
-The Flask server exposes the live monitoring interface and API endpoints.
-
-### Main endpoints
-
-| Endpoint | Method | Purpose |
-|---|---|---|
-| `/` | GET | Main monitoring dashboard |
-| `/data` | GET | Current live sensor/model data |
-| `/events` | GET | Recent hazard events |
-| `/video` | GET | Camera MJPEG stream |
-| `/health` | GET | Application health |
-| `/persons` | GET | Registered/current people data |
-| `/persons/register` | POST | Register a person |
-| `/reset_relay` | POST | Reset relay |
-
-The dashboard is designed to show live system state while the sensor/AI loop runs in the background.
-
----
-
-# 15. Phase 12 — Main Application Integration
-
-Entry point:
-
-```
-src/main.py
-```
-
-This file connects all major components.
-
-### Runtime sequence
-
-Every sensor cycle approximately follows:
-
-```
-1. Read sensor/camera data
-        |
-2. Gas Random Forest prediction
-        |
-3. LSTM temperature analysis
-        |
-4. CNN fire analysis
-        |
-5. Person presence update
-        |
-6. Decision Engine fusion
-        |
-7. Predictive risk update
-        |
-8. Dashboard live-data update
-        |
-9. Event/notification handling
-        |
-10. Firebase live updates when configured
-```
-
-The application starts the sensor loop in the background and runs the Flask dashboard in the main process.
-
----
-
-# 16. Phase 13 — Simulation Mode
-
-Simulation mode is one of the most important software-development features because it allows the full application to be exercised without physical hardware.
-
-Run:
-
-```bash
-python src/main.py --sim
-```
-
-Simulation mode provides:
-
-- simulated sensor readings
-- simulated Arduino interface
-- simulated relay response
-- simulated Firebase behavior when configured for simulation
-- real AI/model loading
-- real Decision Engine execution
-- real predictive-risk processing
-- real Flask dashboard
-- real event processing
-
-This makes it possible to validate the software pipeline independently from physical hardware availability.
-
----
-
-# 17. Phase 14 — Local Software Validation
-
-The project was validated through a complete simulation run.
-
-The demonstrated run completed:
-
-```
-150 cycles
-```
-
-The run showed:
-
-- Application startup
-- Simulation-mode Arduino reader
-- Model initialization
-- Gas model loading
-- LSTM model loading
-- CNN model loading
-- Camera pipeline initialization
-- Flask dashboard startup
-- Successful dashboard API requests
-- Predictive warning states
-- Critical hazard state
-- Simulated relay activation
-- Simulated Firebase notification
-- Hazard event logging
-- Recovery to SAFE state
-- Completion of the full cycle sequence
-
-Example critical event observed during simulation:
-
-```
-CRITICAL
-score = 1.00
-gas = methane
-fire = 100%
-People = 5
-```
-
-The simulation then returned to SAFE after the simulated hazard condition cleared.
-
-This demonstrates the software integration path from input → AI → decision → prediction → response → dashboard/event handling.
-
----
-
-# 18. Phase 15 — Automated Software Testing
-
-The repository contains Pytest tests for decision logic, predictive risk, gas-model rule fallbacks, and CNN fire-probability mapping:
-
-```
-tests/
-  test_decision_engine.py
-  test_predictive_risk.py
-  test_gas_model.py
-  test_cnn_model.py
-```
-
-Run locally:
-
-```bash
-python -m pytest -q
-```
-
-The tests focus on the core software decision and predictive-risk logic.
-
----
-
-# 19. Phase 16 — GitHub Actions CI
-
-Workflow:
-
-```
-.github/workflows/software-validation.yml
-```
-
-The CI pipeline performs software validation automatically.
-
-Current workflow includes:
-
-1. Checkout repository.
-2. Set up Python.
-3. Install `requirements.txt`.
-4. Run Pytest.
-5. Build the Docker image.
-
-Docker validation command used by CI:
-
-```bash
-docker build -t fyp-hazard-prevention:ci .
-```
-
-This provides a repeatable software-quality gate whenever the repository is updated.
-
----
-
-# 20. Phase 17 — Dockerization
-
-File:
-
-```
-Dockerfile
-```
-
-The application is containerized using:
-
-```
-python:3.10-slim
-```
-
-The image installs the Python dependencies and copies:
-
-```
-src/
-dashboard/
-models/
-```
-
-The container exposes port:
-
-```
-5000
-```
-
-The default container command runs the software in simulation mode without requiring Firebase:
-
-```
-python src/main.py --sim --no-firebase --web-port 5000
-```
-
-### Build
-
-```bash
-docker build -t fyp-hazard-prevention .
-```
-
-### Run
-
-```bash
-docker run --rm -p 5000:5000 fyp-hazard-prevention
-```
-
-Then open:
-
-```
-http://localhost:5000
-```
-
----
-
-# 21. Complete Project Structure
-
-Current repository structure:
-
-```
-fyp-hazard-prevention-system/
-│
-├── .github/
-│   └── workflows/
-│       └── software-validation.yml
-│
+## 1. Project objectives
+
+The system is designed to help monitor potentially hazardous conditions and raise early warnings by combining multiple software signals. It is an academic prototype, not a replacement for certified industrial fire, gas, or life-safety equipment.
+
+The software objectives are to:
+
+- process sensor readings and camera frames;
+- classify gas-risk categories with a Random Forest model;
+- identify temperature anomalies using an LSTM forecasting model;
+- estimate fire probability using a MobileNetV2-based image classifier;
+- combine signals into SAFE, WARNING, and CRITICAL states;
+- forecast short-term risk trends for early warning;
+- associate visible people with hazard events where recognition data is configured;
+- provide simulated relay actions, event logging, and optional Firebase notifications;
+- expose monitoring data through a Flask dashboard and API;
+- support local simulation, automated tests, CI, and Docker image building.
+
+## 2. System architecture
+
+```text
+Gas readings ──────> Random Forest ───┐
+Temperature series ─> LSTM anomaly ───┤
+Camera frames ──────> CNN fire score ─┤
+Flame signal ─────────────────────────┤
+                                      v
+                            Decision Engine
+                         SAFE / WARNING / CRITICAL
+                                      |
+                           Predictive Risk Trend
+                                      |
+                 +--------------------+-------------------+
+                 |                    |                   |
+           Relay interface       Event handling      Flask dashboard
+                 |                    |                   |
+          Simulation output     Optional Firebase     REST endpoints
+```
+
+The principal software path is:
+
+1. Acquire readings from simulation or the serial-reader abstraction.
+2. Run the available model/rule inference paths.
+3. combine the available risk signals in the Decision Engine.
+4. calculate a short-horizon risk trend.
+5. publish state and events to the dashboard/API.
+6. invoke simulated or configured response paths when thresholds are crossed.
+
+The actual behavior depends on the model files, local configuration, camera/serial availability, and Firebase setup.
+
+## 3. Technology stack
+
+| Area | Technology |
+|---|---|
+| Language | Python |
+| Gas classification | scikit-learn Random Forest |
+| Temperature anomaly forecasting | TensorFlow/Keras LSTM |
+| Fire image classification | TensorFlow/Keras MobileNetV2 |
+| Image and face processing | OpenCV |
+| Web application/API | Flask |
+| Model/data utilities | NumPy, pandas, joblib, scikit-learn |
+| Optional cloud events and notifications | Firebase Admin SDK / Firebase web configuration |
+| Hardware serial interface | pySerial |
+| Tests | pytest |
+| CI | GitHub Actions |
+| Containerization | Docker |
+
+Dependency versions are pinned in `requirements.txt`. The current dependency set targets Python 3.10; install it in an isolated virtual environment.
+
+## 4. Repository layout
+
+```text
+.
+├── .github/workflows/software-validation.yml
 ├── arduino/
 │   └── hazard_sensors.ino
-│
 ├── dashboard/
-│   ├── __init__.py
 │   ├── app.py
-│   ├── static/
-│   │   └── js/
-│   │       └── firebase-sw.js
+│   ├── static/js/firebase-sw.js
 │   └── templates/
-│       ├── index.html
-│       └── register_token.html
-│
 ├── data/
 │   ├── gas_dataset/
 │   └── temperature_dataset/
-│
 ├── docs/
 │   ├── HARDWARE_SETUP.md
+│   ├── PROJECT_HEALTH_AUDIT_2026-10-16.md
 │   └── SOFTWARE_VALIDATION.md
-│
-├── CONTRIBUTING.md
-│
 ├── models/
-│   ├── cnn_fire_model.h5
 │   ├── gas_labels.pkl
 │   ├── gas_rf_model.pkl
 │   ├── gas_scaler.pkl
 │   ├── lstm_scaler.pkl
 │   ├── lstm_temp_model.h5
 │   └── lstm_threshold.pkl
-│
 ├── notebooks/
 │   ├── 01_train_gas_model.py
 │   ├── 02_train_lstm_model.py
-│   └── 03_train_cnn_model.py
-│
+│   ├── 03_train_cnn_model.py
+│   ├── 04_evaluate_models.py
+│   ├── 05_cnn_quality_audit.py
+│   ├── 06_build_cnn_split_manifest.py
+│   ├── 07_train_cnn_manifest.py
+│   ├── 08_evaluate_cnn_manifest.py
+│   ├── 09_evaluate_cnn_unseen_photos.py
+│   └── CNN_TRAINING_WORKFLOW.md
 ├── src/
 │   ├── arduino_reader.py
 │   ├── cnn_model.py
@@ -880,608 +131,316 @@ fyp-hazard-prevention-system/
 │   ├── person_recognition.py
 │   ├── predictive_logger.py
 │   └── predictive_risk.py
-│
 ├── tests/
-│   ├── test_decision_engine.py
-│   ├── test_predictive_risk.py
-│   ├── test_gas_model.py
-│   └── test_cnn_model.py
-│
-├── .dockerignore
-├── .gitignore
 ├── Dockerfile
-├── README.md
-└── requirements.txt
+├── requirements.txt
+└── README.md
 ```
 
----
+**Artifact availability note:** The gas and temperature artifacts listed above are tracked in the current repository. The current `main` branch does not contain `models/cnn_fire_model.h5`, and the CNN image dataset is not tracked under `data/`. The CNN training/evaluation source is present; the CNN model must be generated from the local dataset before the trained CNN inference path can load a model. Do not describe a missing model artifact as already deployed.
 
-# 22. How to Install From Scratch
+## 5. Software modules
 
-## Step 1 — Clone the repository
+### 5.1 Data acquisition and simulation
 
-```bash
-git clone https://github.com/cloudforge-creator/fyp-hazard-prevention-system.git
-cd fyp-hazard-prevention-system
+Relevant files: `src/arduino_reader.py`, `src/main.py`, `arduino/hazard_sensors.ino`.
+
+The application provides a serial-reader abstraction and simulation mode. Simulation is intended for software demonstration without an attached Arduino. Simulated readings are not evidence of physical sensor accuracy or hardware response.
+
+### 5.2 Gas classification — Random Forest
+
+Relevant files: `src/gas_model.py`, `notebooks/01_train_gas_model.py`.
+
+The model pipeline uses engineered features from MQ-2-style readings and classifies the configured gas-risk categories. The included training script currently generates a synthetic training set from assumed sensor profiles; its evaluation results therefore do not establish accuracy on independently collected, calibrated physical-sensor readings. The tracked gas model, scaler, and label mapping are available in `models/`.
+
+### 5.3 Temperature anomaly detection — LSTM
+
+Relevant files: `src/lstm_model.py`, `notebooks/02_train_lstm_model.py`.
+
+The LSTM uses a rolling sequence of historical readings to estimate the next value and compares prediction error against a threshold. The temperature dataset is tracked at `data/temperature_dataset/machine_temperature_system_failure.csv`. The model, scaler, and threshold artifacts are tracked in `models/`. This dataset is a machine-temperature time series, not a calibrated DHT22 laboratory dataset.
+
+### 5.4 Camera fire detection — MobileNetV2 CNN
+
+Relevant files: `src/cnn_model.py`, `notebooks/03_train_cnn_model.py`, and the manifest-aware scripts `notebooks/06_*` through `notebooks/09_*`.
+
+The runtime expects a Keras model at:
+
+```text
+models/cnn_fire_model.h5
 ```
 
-## Step 2 — Create virtual environment
+The runtime resizes frames to 224 × 224 and uses MobileNetV2 preprocessing. The training workflow expects two image classes under `data/fire_dataset/fire/` and `data/fire_dataset/no_fire/`. The current public repository does not include those image folders or the runtime model file. The dataset must be available locally and the selected model must be trained/evaluated and placed at the expected path before CNN inference can use it.
 
-### Windows PowerShell
+For the duplicate-aware, leakage-conscious workflow, follow [CNN_TRAINING_WORKFLOW.md](notebooks/CNN_TRAINING_WORKFLOW.md). Keep the held-out test split separate from model selection. A validation-accuracy target is not a guaranteed result or a safety certification.
+
+The camera module also contains visual signal processing and temporal filtering. Such heuristics are secondary signals and are not calibrated fire probabilities.
+
+**Model compatibility warning:** The current runtime loader expects a Keras image-classification model. YOLO/object-detection weights are a different model format and output contract; they cannot be substituted directly without adapting and validating the inference integration.
+
+### 5.5 Person presence and recognition
+
+Relevant file: `src/person_recognition.py`.
+
+The camera pipeline supports face detection/recognition using OpenCV components and can associate recognized or unknown visible people with an event. Recognition depends on suitable local registration data and camera conditions. It identifies people visible in the camera view; it does not calculate exact physical distance to a hazard. Biometric registration data should not be committed publicly.
+
+### 5.6 Decision Engine
+
+Relevant file: `src/decision_engine.py`.
+
+The engine combines available gas, temperature, and camera/fire signals into the configured risk state. The documented conceptual weights are:
+
+- CNN fire signal: 0.50
+- gas risk: 0.35
+- temperature anomaly: 0.15
+
+The implementation also includes a high-risk gas adjustment and an immediate critical override for configured flame/fire conditions. These are application decision rules, not a claim that the fused score is a statistically calibrated probability of an accident.
+
+### 5.7 Predictive risk / early warning
+
+Relevant file: `src/predictive_risk.py`.
+
+The component keeps a rolling history of risk signals, estimates trends with least-squares regression, projects the trend over a short horizon, and classifies the projected risk. It should be described as **short-horizon predictive risk / early warning**, not exact prediction of the time or certainty of a future fire.
+
+### 5.8 Event handling and response interface
+
+Relevant files: `src/predictive_logger.py`, `src/firebase_handler.py`, `src/arduino_reader.py`.
+
+The software can log hazard events and request relay state changes. In simulation mode, relay activation is represented as a simulated action; it does not cut power to a physical machine. Firebase notifications and cloud event storage require valid project configuration and credentials.
+
+### 5.9 Dashboard and API
+
+Relevant file: `dashboard/app.py`.
+
+The Flask dashboard provides a live monitoring view and API routes for sensor/model data, events, video, person registration, and relay reset. The application is intended for a controlled development/demo environment. Do not expose it to a public or shared network without authentication, authorization, and appropriate endpoint protection; the documented implementation has routes that require security hardening before such exposure.
+
+## 6. Data and model artifact inventory
+
+| Asset | Current repository status | Notes |
+|---|---|---|
+| Gas dataset files | Tracked | `data/gas_dataset/batch1.dat` through `batch10.dat` |
+| Gas RF model/scaler/labels | Tracked | Synthetic training assumptions still apply |
+| Temperature dataset | Tracked | Machine temperature time series |
+| LSTM model/scaler/threshold | Tracked | Saved inference artifacts |
+| CNN training/evaluation scripts | Tracked | Multiple workflows available |
+| CNN image dataset | Not tracked | Supply local class folders |
+| Runtime CNN model `cnn_fire_model.h5` | Not present on current main | Train/evaluate compatible model before CNN inference |
+| Person registration/biometric data | Local/private data | Not committed |
+| Firebase service-account key | Not tracked | Configure privately if needed |
+
+Never commit service-account keys, API secrets, private face data, or other credentials to Git.
+
+## 7. Install and run
+
+### 7.1 Clone and create an environment
+
+Windows PowerShell:
 
 ```powershell
-python -m venv venv
+git clone https://github.com/cloudforge-creator/fyp-hazard-prevention-system.git
+Set-Location .\fyp-hazard-prevention-system
+
+py -3.10 -m venv venv
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\venv\Scripts\Activate.ps1
-```
 
-### Windows CMD
-
-```cmd
-python -m venv venv
-venv\Scripts\activate
-```
-
-### Linux/macOS
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-```
-
-## Step 3 — Install dependencies
-
-```bash
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
----
+If Python 3.10 is not installed, install the Python version required by the pinned dependency set before creating the environment. Do not upgrade NumPy independently of TensorFlow; review the full dependency set together.
 
-# 23. Run the Complete Software Without Hardware
+### 7.2 Run software simulation
 
-The recommended first run is simulation mode:
-
-```bash
-python src/main.py --sim
+```powershell
+python src/main.py --sim --no-firebase
 ```
 
-Expected startup includes:
+Open [http://localhost:5000](http://localhost:5000).
 
-```
-Mode: SIMULATION
-[ArduinoReader] SIMULATION mode - no hardware needed
-[Main] All components initialised
-[Dashboard] Starting at http://0.0.0.0:5000
-```
+Simulation mode is useful for demonstrating application flow without Arduino hardware. Because the CNN runtime artifact is absent from the current repository snapshot, the CNN path may report that its trained model is unavailable until a compatible model has been trained and installed. Do not interpret a simulation-only run as validation of trained camera inference.
 
-Open:
+Other options documented by the application include:
 
-```
-http://localhost:5000
-```
-
-Check:
-
-```
-http://localhost:5000/health
-http://localhost:5000/data
-http://localhost:5000/events
-```
-
----
-
-# 24. Train the AI Models
-
-Training scripts are provided under `notebooks/`.
-
-## Gas Random Forest
-
-```bash
-python notebooks/01_train_gas_model.py
-```
-
-Output artifacts are stored under `models/`.
-
-## LSTM Temperature Model
-
-```bash
-python notebooks/02_train_lstm_model.py
-```
-
-Output artifacts are stored under `models/`.
-
-## CNN Fire Model
-
-```bash
-python notebooks/03_train_cnn_model.py
-```
-
-The CNN training script requires the appropriate fire/no-fire image dataset described by the training script.
-
-> Existing trained model artifacts are already present in the repository, so normal runtime testing can use the saved models without retraining.
-
----
-
-# 25. Firebase Setup
-
-Firebase is optional for local software simulation.
-
-When cloud functionality is required:
-
-1. Create a Firebase project.
-2. Enable Realtime Database.
-3. Configure the Firebase service account securely.
-4. Configure the database URL.
-5. Configure the web Firebase settings.
-6. Configure FCM/VAPID settings for browser push notifications.
-7. Start the application with Firebase enabled.
-
-**Do not commit service-account credentials, private keys, or other secrets to GitHub.**
-
-For software-only testing, Firebase can be disabled/simulated.
-
----
-
-# 26. Person Registration
-
-Start the application and open the dashboard.
-
-The registration API accepts:
-
-```
-POST /persons/register
-```
-
-Required information:
-
-- person ID
-- name
-- designation
-- one or more face images
-
-The local recognition data is maintained under the local `data/` area and is intentionally not treated as public repository content.
-
-After registration, the system can recognize the person locally and associate current presence with hazard events.
-
----
-
-# 27. Run With Arduino Hardware
-
-When the physical embedded system is ready:
-
-```bash
-python src/main.py
-```
-
-Or specify the serial port:
-
-```bash
-python src/main.py --port COM4
-```
-
-The Arduino communication uses:
-
-```
-9600 baud
-```
-
-The Python application attempts to discover a compatible serial port automatically when one is not supplied.
-
----
-
-# 28. Arduino Hardware Layer
-
-File:
-
-```
-arduino/hazard_sensors.ino
-```
-
-Current intended pin mapping:
-
-| Component | Pin |
-|---|---|
-| MQ-2 gas | A0 |
-| DHT22 | D2 |
-| Flame sensor | D4 |
-| Relay | D7 |
-
-The Arduino sketch sends sensor readings approximately every 500 ms and accepts relay commands:
-
-```
-RELAY:ON
-RELAY:OFF
-```
-
----
-
-# 29. Hardware Calibration — Separate From Software Completion
-
-The physical MQ-2 sensor requires calibration.
-
-Typical workflow:
-
-1. Upload the Arduino sketch.
-2. Open Serial Monitor at 9600 baud.
-3. Allow the sensor to stabilize in clean air.
-4. Observe gas-ratio readings.
-5. Determine the appropriate clean-air reference.
-6. Update the calibration constant in the Arduino sketch.
-7. Re-upload the sketch.
-8. Collect representative labeled sensor data if retraining is required.
-
-Physical calibration, physical relay testing, real sensor accuracy testing, and other laboratory validation are **hardware activities** and are separate from the software implementation/validation documented in this repository.
-
----
-
-# 30. Command-Line Options
-
-The main application supports options such as:
-
-```bash
+```powershell
 python src/main.py --sim
 python src/main.py --port COM4
 python src/main.py --no-firebase
-python src/main.py --web-port 5000
-```
-
-Examples:
-
-### Simulation without Firebase
-
-```bash
-python src/main.py --sim --no-firebase
-```
-
-### Simulation on another web port
-
-```bash
 python src/main.py --sim --web-port 8000
 ```
 
----
+Use `--no-firebase` when cloud credentials are not configured.
 
-# 31. Software Validation Checklist
+## 8. Train and evaluate models
 
-| Component | Software status |
-|---|---|
-| Python application startup | Implemented |
-| Simulation mode | Implemented |
-| Arduino serial abstraction | Implemented |
-| Simulated sensor input | Implemented |
-| Gas Random Forest inference | Implemented |
-| LSTM temperature analysis | Implemented |
-| CNN fire inference | Implemented |
-| Camera processing | Implemented |
-| Person presence | Implemented |
-| Person recognition | Implemented |
-| Multi-model decision engine | Implemented |
-| Risk thresholds | Implemented |
-| Predictive risk trend | Implemented |
-| Early-warning logic | Implemented |
-| Relay command interface | Implemented |
-| Firebase integration | Implemented |
-| Firebase event logging | Implemented |
-| Push-notification path | Implemented |
-| Flask dashboard | Implemented |
-| Live data API | Implemented |
-| Event API | Implemented |
-| Camera streaming API | Implemented |
-| Person registration API | Implemented |
-| Relay reset API | Implemented |
-| Unit tests | Implemented |
-| GitHub Actions CI | Implemented |
-| Docker build validation | Implemented |
-| End-to-end simulation | Completed |
-| Software documentation | Completed |
+Run commands from the repository root in the activated environment.
 
----
+### Gas Random Forest
 
-# 32. What Was Actually Verified
-
-The software has been exercised through an end-to-end simulation run reaching 150 cycles.
-
-Observed behavior included:
-
-```
-Startup
-  ↓
-Simulation sensor data
-  ↓
-Gas model loaded
-  ↓
-LSTM model loaded
-  ↓
-CNN model loaded
-  ↓
-Decision Engine
-  ↓
-Predictive trend processing
-  ↓
-Flask dashboard
-  ↓
-API requests
-  ↓
-WARNING states
-  ↓
-CRITICAL state
-  ↓
-Simulated relay activation
-  ↓
-Simulated Firebase notification/event
-  ↓
-SAFE recovery
-  ↓
-150 cycles completed
+```powershell
+python notebooks/01_train_gas_model.py
 ```
 
-Automated software validation is also configured through GitHub Actions for unit tests and Docker build validation.
+This script trains from its configured synthetic MQ-2 profile generator and saves artifacts under `models/`. Treat its metrics as synthetic-data evaluation, not independent sensor validation.
 
----
+### Temperature LSTM
 
-# 33. Software Completion Scope
-
-For the purpose of **software-only project tracking**, the repository contains the implemented application, AI inference pipeline, predictive risk component, person-presence pipeline, dashboard/API layer, Firebase integration, testing infrastructure, Dockerization, CI workflow, and validation documentation.
-
-### Included in software scope
-
-- Application source code
-- AI/ML inference
-- AI model artifacts
-- Data-processing logic
-- Decision Engine
-- Predictive risk
-- Person recognition software
-- Dashboard
-- REST endpoints
-- Firebase integration
-- Notification logic
-- Relay-control software interface
-- Simulation mode
-- Unit tests
-- Docker
-- GitHub Actions
-- Documentation
-
-### Not used to reduce software completion
-
-The following are physical/hardware validation tasks:
-
-- Physical Arduino validation
-- MQ-2 laboratory calibration
-- DHT22 physical accuracy validation
-- Physical flame-sensor validation
-- Physical relay/machine-power testing
-- Physical camera placement validation
-
-These are separate from the software implementation status.
-
----
-
-# 34. Important Technical Limitations
-
-### Predictive model
-
-The current predictive component is a temporal trend forecaster. It should be described as **predictive risk / early warning**, not as an exact predictor of when a fire will occur.
-
-### Gas classification
-
-MQ-2 is a broad gas sensor. Gas labels and risk values should be interpreted according to the project's calibration/data assumptions and should not be presented as laboratory-grade gas concentration measurements.
-
-### Person recognition
-
-The camera pipeline identifies presence/registered faces within its visual field. It does not calculate exact physical distance to a hazard.
-
-### Model accuracy
-
-Successful runtime inference and integration testing do not by themselves establish scientific model accuracy. Formal accuracy/precision/recall/F1/AUC evaluation requires appropriate labeled test datasets and experimental methodology.
-
----
-
-# 35. Troubleshooting
-
-## Port 5000 already in use
-
-Run the application on another port:
-
-```bash
-python src/main.py --sim --web-port 8000
+```powershell
+python notebooks/02_train_lstm_model.py
 ```
 
-Then open:
+The script reads the tracked temperature dataset and saves the model/scaler/threshold artifacts under `models/`.
 
-```
-http://localhost:8000
-```
+### CNN fire classifier
 
-## No Arduino detected
+First supply the local dataset:
 
-Use simulation mode:
-
-```bash
-python src/main.py --sim
-```
-
-## Firebase configuration problem
-
-Run without Firebase:
-
-```bash
-python src/main.py --sim --no-firebase
+```text
+data/
+└── fire_dataset/
+    ├── fire/
+    └── no_fire/
 ```
 
-## Models not found
+For the duplicate-aware workflow:
 
-Run the relevant training script or verify that the required files exist under:
-
+```powershell
+python notebooks/06_build_cnn_split_manifest.py
+python notebooks/07_train_cnn_manifest.py
+python notebooks/08_evaluate_cnn_manifest.py --model models/cnn_fire_model_candidate.h5
 ```
-models/
-```
 
-## Test failures
+Review [notebooks/CNN_TRAINING_WORKFLOW.md](notebooks/CNN_TRAINING_WORKFLOW.md) before running these commands. The workflow writes candidate artifacts and evaluation outputs; the runtime's expected filename is `models/cnn_fire_model.h5`. Only promote a selected compatible candidate after evaluation and verification. Do not overwrite the runtime model merely because training completed.
 
-Run:
+## 9. Tests, CI, and Docker
 
-```bash
+Run unit tests:
+
+```powershell
 python -m pytest -q
 ```
 
-and inspect the failing test before changing the application logic.
+Compile the manifest-aware CNN workflow scripts:
 
----
-
-# 36. Development and Git Workflow
-
-The repository was developed using feature/fix branches and pull requests before final integration into `main`.
-
-The final repository contains:
-
-- feature integration
-- software validation changes
-- automated CI
-- final documentation
-
-Recommended workflow for future changes:
-
-```
-Create branch
-     ↓
-Implement change
-     ↓
-Run local tests
-     ↓
-Run simulation
-     ↓
-Commit
-     ↓
-Push branch
-     ↓
-Open Pull Request
-     ↓
-GitHub Actions validation
-     ↓
-Review
-     ↓
-Merge into main
+```powershell
+python -m py_compile notebooks/06_build_cnn_split_manifest.py
+python -m py_compile notebooks/07_train_cnn_manifest.py
+python -m py_compile notebooks/08_evaluate_cnn_manifest.py
+python -m py_compile notebooks/09_evaluate_cnn_unseen_photos.py
 ```
 
----
+Build the Docker image:
 
-# 37. Future Improvements
-
-Possible future research/development work includes:
-
-1. Replace the temporal trend forecaster with a supervised future-hazard prediction model after collecting sufficient labeled transition data.
-2. Perform formal model evaluation using independent test datasets.
-3. Add richer sensor fusion and calibration.
-4. Add persistent analytics and historical charts.
-5. Add role-based dashboard authentication.
-6. Improve camera/person tracking under difficult lighting and occlusion.
-7. Add structured experiment logging for FYP research results.
-8. Upgrade the development/CI Python version after confirming compatibility with the project's ML dependency set.
-9. Add deployment automation for a production cloud environment.
-
----
-
-# 38. Final System Summary
-
-The complete software architecture can be summarized as:
-
-```
-                  PREDICTIVE AI HAZARD PREVENTION SYSTEM
-                                  |
-             +--------------------+--------------------+
-             |                                         |
-        SENSOR LAYER                              CAMERA LAYER
-             |                                         |
-       Arduino Reader                         OpenCV / CNN / Face
-             |                                         |
-       +-----+------+                         +--------+--------+
-       |            |                         |                 |
-      Gas       Temperature                 Fire           People
-       |            |                         |                 |
-      RF           LSTM                     CNN        Presence/Recognition
-       |            |                         |                 |
-       +------------+-------------------------+-----------------+
-                                  |
-                                  v
-                         DECISION ENGINE
-                                  |
-                       +----------+----------+
-                       |                     |
-                 Current Risk          Predictive Risk
-                       |                     |
-                 SAFE/WARNING/          Trend / Forecast /
-                  CRITICAL             Early Warning
-                       |                     |
-                       +----------+----------+
-                                  |
-                    +-------------+-------------+
-                    |             |             |
-                  Relay        Firebase      Flask
-                 Response       Events       Dashboard
-                    |             |             |
-                    +-------------+-------------+
-                                  |
-                           Monitoring & Alerts
-```
-
----
-
-## 39. Quick Start
-
-For the fastest software-only demonstration:
-
-```bash
-git clone https://github.com/cloudforge-creator/fyp-hazard-prevention-system.git
-cd fyp-hazard-prevention-system
-
-python -m venv venv
-
-# Windows PowerShell
-.\venv\Scripts\Activate.ps1
-
-pip install -r requirements.txt
-
-python src/main.py --sim --no-firebase
-```
-
-Open:
-
-```
-http://localhost:5000
-```
-
-Run automated tests in another terminal:
-
-```bash
-python -m pytest -q
-```
-
-Build the container:
-
-```bash
+```powershell
 docker build -t fyp-hazard-prevention .
 ```
 
----
+The GitHub Actions workflow at `.github/workflows/software-validation.yml` installs dependencies, compiles CNN workflow scripts, runs pytest, and builds the simulation image. CI passing means those configured checks passed for that commit; it does not prove physical sensor behavior, live Firebase delivery, production security, or accuracy on unseen camera footage.
 
-## 40. Demo capture
+## 10. Validation evidence and interpretation
 
-A real dashboard screenshot/GIF should be captured from a running simulation rather than fabricated from placeholder values. Start the app with `python src/main.py --sim --no-firebase`, open `http://localhost:5000`, wait for live data, and capture the dashboard using the operating system screenshot tool or a screen recorder. Remove any personal information before publishing the image.
+The repository includes [docs/SOFTWARE_VALIDATION.md](docs/SOFTWARE_VALIDATION.md) and [docs/PROJECT_HEALTH_AUDIT_2026-10-16.md](docs/PROJECT_HEALTH_AUDIT_2026-10-16.md).
 
-## 41. Documentation
+These documents record historical checks for a previously reviewed commit, including a documented 150-cycle simulation and a prior CI run. They are historical evidence, not a claim that the exact current commit has just been rerun. Always use the commit SHA and associated Actions run when reporting validation.
 
-Detailed software validation information is available in:
+Report model quality using an appropriate held-out labeled test set and metrics such as precision, recall, F1, confusion matrix, and (where applicable) ROC-AUC. Runtime success alone does not establish model accuracy. Do not present a target accuracy as an achieved result.
 
+## 11. Firebase configuration
+
+Firebase is optional for the local software-only demo. To enable it, configure the appropriate private service-account credentials, Realtime Database URL, web configuration, and FCM/VAPID settings required by the implementation. Keep all private credentials out of source control.
+
+Without valid credentials, use:
+
+```powershell
+python src/main.py --sim --no-firebase
 ```
-docs/SOFTWARE_VALIDATION.md
+
+A code path for notification delivery does not prove that a real device received a notification. Verify actual delivery separately when Firebase is configured.
+
+## 12. Arduino interface (hardware integration)
+
+The Arduino sketch is at `arduino/hazard_sensors.ino`. The intended serial protocol uses 9600 baud and the documented pin mapping is:
+
+| Component | Pin |
+|---|---|
+| MQ-2 gas sensor | A0 |
+| DHT22 temperature/humidity sensor | D2 |
+| Flame sensor | D4 |
+| Relay module | D7 |
+
+Use `python src/main.py --port COM4` with the correct port when the physical board is connected. Check [docs/HARDWARE_SETUP.md](docs/HARDWARE_SETUP.md) for wiring and setup guidance.
+
+Physical calibration, sensor accuracy, electrical safety, relay switching, and camera placement are outside software-only validation. Never connect a live machine or rely on this academic prototype for real-life safety without appropriate engineering review and independent safety testing.
+
+## 13. Scope and completion statement
+
+The project software scope comprises the application modules, model-training/inference code, decision logic, predictive-risk logic, dashboard/API, optional Firebase integration, simulation mode, test suite, CI workflow, Docker configuration, and technical documentation present in this repository.
+
+For academic project reporting, distinguish these separate dimensions:
+
+- **Software implementation:** source modules and integration included in the defined software-only prototype scope.
+- **Reproducibility of trained inference:** depends on the required dataset and model artifacts being available; the CNN runtime model and image dataset are not present in the current public main branch.
+- **Software verification:** limited to the specific tests, CI runs, and historical simulation evidence recorded for their respective commits.
+- **External configuration:** Firebase credentials, local person-registration data, camera availability, and serial-device configuration are environment-specific.
+- **Physical commissioning:** hardware calibration and physical response testing are separate from software implementation.
+
+This repository is an academic prototype. It is not a certified fire-protection product and must not be represented as production-ready or as guaranteeing prevention of hazards.
+
+## 14. Troubleshooting
+
+**PowerShell cannot activate the environment**
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\venv\Scripts\Activate.ps1
 ```
 
-This README describes the project from initial setup and architecture through AI processing, integration, simulation, testing, Dockerization, CI, and the final software scope.
+**Port 5000 is occupied**
 
----
+```powershell
+python src/main.py --sim --no-firebase --web-port 8000
+```
+
+Then open [http://localhost:8000](http://localhost:8000).
+
+**CNN model is not found**
+
+Confirm the local dataset is arranged under `data/fire_dataset/fire/` and `data/fire_dataset/no_fire/`, follow the CNN training workflow, evaluate a candidate, and place the selected compatible Keras model at `models/cnn_fire_model.h5`.
+
+**Firebase errors**
+
+Check private credentials and project configuration, or use `--no-firebase` for a local simulation.
+
+**Tests fail**
+
+Run `python -m pytest -q`, identify the failing test, and review the error before changing implementation or dependency versions.
+
+## 15. Development workflow
+
+```text
+Create branch
+    ↓
+Make a focused change
+    ↓
+Run relevant tests
+    ↓
+Run the software simulation
+    ↓
+Commit and push
+    ↓
+Open pull request
+    ↓
+Review CI results
+    ↓
+Merge after review
+```
+
+## 16. Key documentation
+
+- [Software validation report](docs/SOFTWARE_VALIDATION.md)
+- [Project health audit](docs/PROJECT_HEALTH_AUDIT_2026-10-16.md)
+- [Hardware setup](docs/HARDWARE_SETUP.md)
+- [CNN training workflow](notebooks/CNN_TRAINING_WORKFLOW.md)
 
 ## License
 
-This repository is an academic Final Year Project. Add an explicit open-source license if the project is intended to be reused or redistributed under specific terms.
+This is an academic Final Year Project. No open-source license is currently declared. Reuse and redistribution permissions should be specified by the project owners before public reuse.
