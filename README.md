@@ -1,103 +1,256 @@
 # Predictive AI Hazard Prevention System
 
-**Final Year Project (FYP) — software implementation and software-only demonstration**
+**Final Year Project (FYP) | Software architecture, implementation guide, operation, training, verification, and handover**
 
-This repository contains the software for a predictive hazard-monitoring prototype that combines gas classification, temperature anomaly detection, camera-based fire detection, risk fusion, short-horizon trend forecasting, person presence/recognition, event handling, a Flask dashboard, and simulation/testing infrastructure.
+The Predictive AI Hazard Prevention System is an academic software prototype for monitoring potentially hazardous conditions. It combines gas-risk classification, temperature anomaly detection, camera-based fire classification, multi-signal risk fusion, short-horizon predictive risk assessment, person presence/recognition, event logging, a Flask dashboard, optional Firebase integration, and simulated or serial-based response interfaces.
 
-**Software-scope status:** The planned software modules and their integration are documented as the project's software deliverable. Hardware commissioning and laboratory validation are separate activities. This status does **not** mean the repository is production-certified, that every optional external service is configured, or that model accuracy has been independently certified.
+> **Scope and safety:** This is an academic prototype, not a certified life-safety product. Use simulation for software demonstrations. Do not rely on it as the sole protection against fire, gas, injury, or equipment damage. Hardware calibration, controlled physical tests, independent safety review, and deployment security are separate acceptance activities.
 
-## Project team
+## Project information
 
-- Muhammad Ahad
-- Muhammad Wajdan
-- Muqaddar Hayat
+| Field | Details |
+|---|---|
+| Project | Predictive AI Hazard Prevention System |
+| Type | Final Year Project |
+| Team | Muhammad Ahad, Muhammad Wajdan, Muqaddar Hayat |
+| Supervisor | Mr. Hamid Nawaz |
+| Department | Software Engineering, NUML Faisalabad Campus |
+| Primary language | Python |
+| Web interface | Flask |
+| Repository | [cloudforge-creator/fyp-hazard-prevention-system](https://github.com/cloudforge-creator/fyp-hazard-prevention-system) |
 
-**Supervisor:** Mr. Hamid Nawaz  
-**Department:** Software Engineering, NUML Faisalabad Campus
+## Contents
+
+1. [Purpose and objectives](#1-purpose-and-objectives)
+2. [System architecture](#2-system-architecture)
+3. [End-to-end processing flow](#3-end-to-end-processing-flow)
+4. [Software modules](#4-software-modules)
+5. [Risk fusion and prediction logic](#5-risk-fusion-and-prediction-logic)
+6. [Repository structure](#6-repository-structure)
+7. [Datasets and model artifacts](#7-datasets-and-model-artifacts)
+8. [Requirements and installation](#8-requirements-and-installation)
+9. [Run the application](#9-run-the-application)
+10. [Train and evaluate the models](#10-train-and-evaluate-the-models)
+11. [Dashboard and API reference](#11-dashboard-and-api-reference)
+12. [Firebase and notification configuration](#12-firebase-and-notification-configuration)
+13. [Person registration and privacy](#13-person-registration-and-privacy)
+14. [Testing and continuous integration](#14-testing-and-continuous-integration)
+15. [Docker](#15-docker)
+16. [Arduino and physical integration](#16-arduino-and-physical-integration)
+17. [Configuration and operational behavior](#17-configuration-and-operational-behavior)
+18. [Troubleshooting](#18-troubleshooting)
+19. [Security, safety, and limitations](#19-security-safety-and-limitations)
+20. [Verification and reporting guidance](#20-verification-and-reporting-guidance)
+21. [Development and handover checklist](#21-development-and-handover-checklist)
+22. [Project documentation](#22-project-documentation)
 
 ---
 
-## 1. Project objectives
+## 1. Purpose and objectives
 
-The system is designed to help monitor potentially hazardous conditions and raise early warnings by combining multiple software signals. It is an academic prototype, not a replacement for certified industrial fire, gas, or life-safety equipment.
+The software is intended to demonstrate a multi-signal approach to hazard monitoring and early warning. Its objectives are to:
 
-The software objectives are to:
+- acquire or simulate sensor readings and camera frames;
+- classify gas-related risk using a Random Forest model and engineered sensor features;
+- forecast temperature readings with an LSTM and flag anomalous prediction errors;
+- estimate fire likelihood from camera frames with a MobileNetV2-based CNN;
+- combine available signals into SAFE, WARNING, and CRITICAL classifications;
+- estimate whether risk is increasing, stable, or decreasing over a short forecast horizon;
+- associate camera-visible people with events when registration data is configured;
+- log sensor cycles and risk events;
+- expose live state, recent events, and video through a Flask dashboard/API;
+- optionally write events and live status to Firebase and send configured push notifications;
+- provide simulation, tests, CI checks, and a Docker image for a repeatable software demonstration.
 
-- process sensor readings and camera frames;
-- classify gas-risk categories with a Random Forest model;
-- identify temperature anomalies using an LSTM forecasting model;
-- estimate fire probability using a MobileNetV2-based image classifier;
-- combine signals into SAFE, WARNING, and CRITICAL states;
-- forecast short-term risk trends for early warning;
-- associate visible people with hazard events where recognition data is configured;
-- provide simulated relay actions, event logging, and optional Firebase notifications;
-- expose monitoring data through a Flask dashboard and API;
-- support local simulation, automated tests, CI, and Docker image building.
+### Intended scope
+
+The software scope includes the application entry point, sensor interface, three model paths, decision engine, trend forecaster, event logger, person-recognition component, dashboard, optional cloud integration, training/evaluation scripts, tests, CI, container build, and technical documentation. Hardware commissioning and external-service configuration are environment-specific.
 
 ## 2. System architecture
 
 ```text
-Gas readings ──────> Random Forest ───┐
-Temperature series ─> LSTM anomaly ───┤
-Camera frames ──────> CNN fire score ─┤
-Flame signal ─────────────────────────┤
-                                      v
-                            Decision Engine
-                         SAFE / WARNING / CRITICAL
-                                      |
-                           Predictive Risk Trend
-                                      |
-                 +--------------------+-------------------+
-                 |                    |                   |
-           Relay interface       Event handling      Flask dashboard
-                 |                    |                   |
-          Simulation output     Optional Firebase     REST endpoints
+                 +----------------------------+
+                 | Data acquisition           |
+                 | Arduino serial / simulation|
+                 +-------------+--------------+
+                               |
+              +----------------+----------------+
+              |                |                |
+              v                v                v
+        Gas features     Temperature series   Camera frames
+              |                |                |
+              v                v                v
+        Random Forest        LSTM             MobileNetV2 CNN
+              |                |                |
+              +----------------+----------------+
+                               |
+                      +--------v---------+
+                      | Decision Engine  |
+                      | SAFE / WARNING / |
+                      | CRITICAL         |
+                      +--------+---------+
+                               |
+                      +--------v---------+
+                      | Predictive Risk  |
+                      | Trend / forecast |
+                      +--------+---------+
+                               |
+           +-------------------+-------------------+
+           |                   |                   |
+           v                   v                   v
+     Event + CSV log     Response interface    Flask dashboard
+           |             (simulated/serial)    + REST endpoints
+           |                   |                   |
+           +-------------------+-------------------+
+                               |
+                     Optional Firebase services
 ```
 
-The principal software path is:
+The modules run as a Python application. The main loop processes a cycle approximately every 0.5 seconds when processing time permits. Model inference and camera availability can affect the actual cycle time. The dashboard runs in a Flask thread while the sensor loop operates in the background.
 
-1. Acquire readings from simulation or the serial-reader abstraction.
-2. Run the available model/rule inference paths.
-3. combine the available risk signals in the Decision Engine.
-4. calculate a short-horizon risk trend.
-5. publish state and events to the dashboard/API.
-6. invoke simulated or configured response paths when thresholds are crossed.
+## 3. End-to-end processing flow
 
-The actual behavior depends on the model files, local configuration, camera/serial availability, and Firebase setup.
+1. **Start-up:** Parse CLI arguments, select simulation or serial mode, initialize Firebase (or simulation fallback), create the decision engine, and initialize the dashboard integration.
+2. **Acquire readings:** Obtain gas raw value, gas ratio, temperature, humidity, and flame state from the Arduino reader or the simulator.
+3. **Gas inference:** Use the Random Forest artifact when loadable; otherwise the gas module can fall back to approximate ratio-based rules.
+4. **Temperature inference:** Fill the rolling sequence, predict the next temperature with the LSTM when available, and compare prediction error with the saved threshold. A statistical fallback is available when the LSTM artifacts cannot load.
+5. **Camera inference:** Read the latest camera frame when enabled, estimate fire probability if a compatible CNN artifact is available, and apply the module's temporal/visual signal handling.
+6. **Decision fusion:** Combine gas, temperature, and fire signals, with configured immediate overrides for the flame input or sufficiently high fire signal.
+7. **Trend prediction:** Update rolling risk history and estimate the projected risk over the configured horizon.
+8. **Publish and record:** Update dashboard state, append a CSV sensor/risk row, update optional cloud state at its configured cadence, and record hazard or predictive-warning events.
+9. **Respond:** Execute the configured response path, which may be simulated or serial-command-based depending on the selected mode and attached hardware.
+10. **Repeat:** Continue until the application is stopped.
 
-## 3. Technology stack
+**Important:** fallback behavior helps a demonstration continue when an ML artifact is unavailable, but it does not make that artifact equivalent to a trained model. The UI and evaluation report should distinguish model inference from fallback operation.
 
-| Area | Technology |
-|---|---|
-| Language | Python |
-| Gas classification | scikit-learn Random Forest |
-| Temperature anomaly forecasting | TensorFlow/Keras LSTM |
-| Fire image classification | TensorFlow/Keras MobileNetV2 |
-| Image and face processing | OpenCV |
-| Web application/API | Flask |
-| Model/data utilities | NumPy, pandas, joblib, scikit-learn |
-| Optional cloud events and notifications | Firebase Admin SDK / Firebase web configuration |
-| Hardware serial interface | pySerial |
-| Tests | pytest |
-| CI | GitHub Actions |
-| Containerization | Docker |
+## 4. Software modules
 
-Dependency versions are pinned in `requirements.txt`. The current dependency set targets Python 3.10; install it in an isolated virtual environment.
+| Module | Main files | Responsibility |
+|---|---|---|
+| Application orchestration | `src/main.py` | CLI, initialization, sensor loop, model orchestration, dashboard hand-off |
+| Sensor reader | `src/arduino_reader.py`, `arduino/hazard_sensors.ino` | Serial discovery, parsing, simulated readings, relay commands |
+| Gas classification | `src/gas_model.py`, `notebooks/01_train_gas_model.py` | RF inference, feature construction, rule fallback, training |
+| Temperature anomaly detection | `src/lstm_model.py`, `notebooks/02_train_lstm_model.py` | Rolling-window prediction, error threshold, statistical fallback |
+| Camera fire detection | `src/cnn_model.py`, `notebooks/03_train_cnn_model.py` | Camera capture, CNN inference, fire signal, temporal/visual processing |
+| Decision fusion | `src/decision_engine.py` | Weighted score, risk levels, immediate override, response triggers |
+| Predictive risk | `src/predictive_risk.py` | Rolling risk history, linear trend estimate, short-horizon projection |
+| Data logging | `src/predictive_logger.py` | Append timestamped sensor and prediction values to CSV |
+| Person recognition | `src/person_recognition.py` | Haar-cascade face detection, local LBPH recognition, presence tracking |
+| Firebase | `src/firebase_handler.py` | Optional database writes, event storage, presence/person records, push-notification paths |
+| Dashboard/API | `dashboard/app.py`, `dashboard/templates/` | Live monitoring, events, video, health endpoint, person and relay endpoints |
+| Model evaluation | `notebooks/04_evaluate_models.py`, `notebooks/05_*` to `09_*` | Metrics, CNN data quality, split manifest, candidate training, evaluation |
+| Automated verification | `tests/`, `.github/workflows/software-validation.yml` | Unit tests, script compilation, CI, Docker build validation |
 
-## 4. Repository layout
+### 4.1 Sensor reader and simulator
+
+`ArduinoReader` supports automatic serial-port discovery or an explicitly supplied port, uses a 9600-baud serial connection by default, parses the serial key/value stream, and exposes relay activation/deactivation methods. Simulation generates synthetic gas, temperature, humidity, and flame readings for software demonstrations.
+
+When a serial connection cannot be opened, the current reader can switch to simulation mode. A serial read exception can also return simulated values. Therefore, a running application is not sufficient evidence that hardware is connected: check startup logs and the reported operating mode.
+
+### 4.2 Gas model — Random Forest
+
+The gas module uses the gas ratio and raw ADC input to construct the feature vector expected by the trained model. It loads `models/gas_rf_model.pkl`, `models/gas_scaler.pkl`, and `models/gas_labels.pkl` when present. A rule-based ratio fallback is available.
+
+The current training script generates synthetic MQ-2 profiles based on assumed datasheet-style ratio distributions. Metrics produced from that synthetic data are not equivalent to evaluation on independent, calibrated sensor readings or certified gas concentrations. The MQ-2 is a broad-response sensor and does not by itself provide laboratory-grade identification of every listed gas.
+
+### 4.3 Temperature model — LSTM
+
+The temperature model uses a rolling window of 50 readings. When all artifacts load, the LSTM estimates the next scaled temperature, converts it back to the source scale, calculates prediction error, and compares the error with `models/lstm_threshold.pkl`. During initial warm-up it waits for sufficient samples. If the model artifacts are unavailable or fail to load, the implementation uses a rolling statistical anomaly fallback.
+
+The training workflow reads `timestamp` and `value` from the tracked machine-temperature CSV and uses a time-ordered split. This data demonstrates time-series anomaly detection; it is not a substitute for a calibrated target-device temperature dataset.
+
+### 4.4 Camera fire model — MobileNetV2 CNN
+
+The runtime is configured to load `models/cnn_fire_model.h5`. It resizes images to 224 × 224, applies MobileNetV2 preprocessing, and interprets the sigmoid output according to the training class order (`fire=0`, `no_fire=1`), converting the no-fire score into a fire probability. The module also contains center-region inference, temporal smoothing, a visual flame cue, and camera/person integration.
+
+The current public repository tracks the CNN training/evaluation scripts but does not track the required fire-image dataset or the runtime file `models/cnn_fire_model.h5`. To run trained CNN inference from a clean clone, supply the dataset, train and evaluate a compatible Keras model, and install the selected artifact at the configured path. The manifest-aware workflow in [notebooks/CNN_TRAINING_WORKFLOW.md](notebooks/CNN_TRAINING_WORKFLOW.md) is the preferred documented workflow for duplicate-aware splitting.
+
+**Architecture compatibility:** a YOLO object-detection model produces a different output contract and uses a different loader from the current Keras image classifier. YOLO weights cannot be substituted for `cnn_fire_model.h5` without changing and testing the runtime integration.
+
+### 4.5 Decision engine
+
+The decision engine uses the following documented weights for weighted fusion:
+
+| Signal | Weight |
+|---|---:|
+| CNN fire score | 0.50 |
+| Gas risk | 0.35 |
+| Temperature anomaly score | 0.15 |
+| **Total** | **1.00** |
+
+High-risk gas labels receive an additional configured risk multiplier. The temperature term contributes when the LSTM/statistical path reports an anomaly. The fused score is mapped to SAFE, WARNING, or CRITICAL using the thresholds in `src/decision_engine.py`. A flame-sensor signal or a sufficiently high fire signal can trigger the configured immediate CRITICAL override. The engine also manages response/notification cooldowns.
+
+These are engineered decision rules and weights, not a calibrated probability that a real-world accident will occur. Any threshold changes should be tested against labeled scenarios and documented.
+
+### 4.6 Predictive risk and early warning
+
+The predictive-risk component stores a rolling history of gas, temperature, and fire risk scores. It estimates signal slopes using least-squares regression, projects scores over a configurable forecast horizon, and reports a predicted level, trend, confidence indicator, and early-warning flag.
+
+The method is a short-horizon trend projection. It does not predict an exact time of a future fire and is not a supervised future-event model trained on labeled hazard transitions. The CSV logger can collect timestamped samples for future evaluation and training.
+
+### 4.7 Person presence and recognition
+
+The person module uses OpenCV Haar-cascade face detection and LBPH face recognition. Registration metadata is stored separately from the local LBPH model. It tracks currently visible registered or unknown people and provides information for the dashboard and hazard-event context.
+
+Recognition depends on face image quality, lighting, pose, camera placement, and the quality of registered examples. It is not a general-purpose person detector for every scene and should not be treated as infallible identification. Keep face images, metadata, and recognition models private; do not commit them to a public repository.
+
+### 4.8 Event and CSV logging
+
+The decision engine and dashboard retain recent event information in process memory; the dashboard's local event history is bounded. Firebase event persistence is optional. `PredictiveDataLogger` appends a row to `data/predictive_sensor_log.csv` with a timestamp, gas readings, temperature/humidity, anomaly indicators, fire/flame signals, current risk, predicted risk, and trend.
+
+The CSV is useful for inspection and for building a future labeled dataset. A logged prediction is not a ground-truth label: observed outcomes must be separately labeled before using the data to train or evaluate a future-hazard model.
+
+### 4.9 Dashboard and cloud integration
+
+The Flask application serves the dashboard, JSON endpoints, an MJPEG video stream, health status, person listing/registration, and a relay-reset endpoint. Firebase integration can write live sensor state and event/person/presence data and provide notification-related functionality when configured. The application can be run without cloud credentials in simulation mode.
+
+## 5. Risk fusion and prediction logic
+
+### Current risk classification
+
+The fusion score is calculated from the weighted signal terms in `src/decision_engine.py`, including the gas multiplier and temperature anomaly handling. The source currently defines:
+
+- WARNING threshold: `0.35`
+- CRITICAL threshold: `0.65`
+- Immediate flame override: flame signal active
+- Immediate CNN override: fire probability at or above the configured threshold
+
+The exact behavior is implementation-defined by the code and should be rechecked whenever model output scales or thresholds change.
+
+### Predictive output fields
+
+The decision result can include:
+
+- `level`: current SAFE/WARNING/CRITICAL classification;
+- `score`: current fused risk score;
+- `predicted_level` and `predicted_score`: projected short-horizon result;
+- `prediction_trend`: increasing/stable/decreasing or insufficient-history state;
+- `prediction_confidence`: heuristic confidence indicator based on available history;
+- `early_warning`: predictive-warning flag;
+- `response_level`: response classification, which can indicate a predicted critical state before current risk is critical;
+- `current_people`: current camera presence information where available.
+
+The confidence field is a heuristic indicator, not a statistically calibrated confidence interval.
+
+## 6. Repository structure
 
 ```text
 .
-├── .github/workflows/software-validation.yml
+├── .github/
+│   └── workflows/software-validation.yml
 ├── arduino/
 │   └── hazard_sensors.ino
 ├── dashboard/
 │   ├── app.py
 │   ├── static/js/firebase-sw.js
 │   └── templates/
+│       ├── index.html
+│       └── register_token.html
 ├── data/
 │   ├── gas_dataset/
+│   │   ├── batch1.dat ... batch10.dat
 │   └── temperature_dataset/
+│       └── machine_temperature_system_failure.csv
 ├── docs/
 │   ├── HARDWARE_SETUP.md
 │   ├── PROJECT_HEALTH_AUDIT_2026-10-16.md
@@ -119,8 +272,10 @@ Dependency versions are pinned in `requirements.txt`. The current dependency set
 │   ├── 07_train_cnn_manifest.py
 │   ├── 08_evaluate_cnn_manifest.py
 │   ├── 09_evaluate_cnn_unseen_photos.py
-│   └── CNN_TRAINING_WORKFLOW.md
+│   ├── CNN_TRAINING_WORKFLOW.md
+│   └── plots/README.md
 ├── src/
+│   ├── __init__.py
 │   ├── arduino_reader.py
 │   ├── cnn_model.py
 │   ├── decision_engine.py
@@ -132,108 +287,58 @@ Dependency versions are pinned in `requirements.txt`. The current dependency set
 │   ├── predictive_logger.py
 │   └── predictive_risk.py
 ├── tests/
+│   ├── test_cnn_model.py
+│   ├── test_cnn_split_manifest.py
+│   ├── test_cnn_status.py
+│   ├── test_decision_engine.py
+│   ├── test_gas_model.py
+│   └── test_predictive_risk.py
+├── .dockerignore
+├── .gitignore
+├── CONTRIBUTING.md
 ├── Dockerfile
-├── requirements.txt
-└── README.md
+├── README.md
+└── requirements.txt
 ```
 
-**Artifact availability note:** The gas and temperature artifacts listed above are tracked in the current repository. The current `main` branch does not contain `models/cnn_fire_model.h5`, and the CNN image dataset is not tracked under `data/`. The CNN training/evaluation source is present; the CNN model must be generated from the local dataset before the trained CNN inference path can load a model. Do not describe a missing model artifact as already deployed.
+This tree describes the tracked project structure. Runtime-generated files such as CSV logs, local CNN data/candidates, Firebase service-account credentials, face images, person metadata, and the LBPH model may be created locally and should be handled according to the privacy and configuration guidance below.
 
-## 5. Software modules
+## 7. Datasets and model artifacts
 
-### 5.1 Data acquisition and simulation
-
-Relevant files: `src/arduino_reader.py`, `src/main.py`, `arduino/hazard_sensors.ino`.
-
-The application provides a serial-reader abstraction and simulation mode. Simulation is intended for software demonstration without an attached Arduino. Simulated readings are not evidence of physical sensor accuracy or hardware response.
-
-### 5.2 Gas classification — Random Forest
-
-Relevant files: `src/gas_model.py`, `notebooks/01_train_gas_model.py`.
-
-The model pipeline uses engineered features from MQ-2-style readings and classifies the configured gas-risk categories. The included training script currently generates a synthetic training set from assumed sensor profiles; its evaluation results therefore do not establish accuracy on independently collected, calibrated physical-sensor readings. The tracked gas model, scaler, and label mapping are available in `models/`.
-
-### 5.3 Temperature anomaly detection — LSTM
-
-Relevant files: `src/lstm_model.py`, `notebooks/02_train_lstm_model.py`.
-
-The LSTM uses a rolling sequence of historical readings to estimate the next value and compares prediction error against a threshold. The temperature dataset is tracked at `data/temperature_dataset/machine_temperature_system_failure.csv`. The model, scaler, and threshold artifacts are tracked in `models/`. This dataset is a machine-temperature time series, not a calibrated DHT22 laboratory dataset.
-
-### 5.4 Camera fire detection — MobileNetV2 CNN
-
-Relevant files: `src/cnn_model.py`, `notebooks/03_train_cnn_model.py`, and the manifest-aware scripts `notebooks/06_*` through `notebooks/09_*`.
-
-The runtime expects a Keras model at:
-
-```text
-models/cnn_fire_model.h5
-```
-
-The runtime resizes frames to 224 × 224 and uses MobileNetV2 preprocessing. The training workflow expects two image classes under `data/fire_dataset/fire/` and `data/fire_dataset/no_fire/`. The current public repository does not include those image folders or the runtime model file. The dataset must be available locally and the selected model must be trained/evaluated and placed at the expected path before CNN inference can use it.
-
-For the duplicate-aware, leakage-conscious workflow, follow [CNN_TRAINING_WORKFLOW.md](notebooks/CNN_TRAINING_WORKFLOW.md). Keep the held-out test split separate from model selection. A validation-accuracy target is not a guaranteed result or a safety certification.
-
-The camera module also contains visual signal processing and temporal filtering. Such heuristics are secondary signals and are not calibrated fire probabilities.
-
-**Model compatibility warning:** The current runtime loader expects a Keras image-classification model. YOLO/object-detection weights are a different model format and output contract; they cannot be substituted directly without adapting and validating the inference integration.
-
-### 5.5 Person presence and recognition
-
-Relevant file: `src/person_recognition.py`.
-
-The camera pipeline supports face detection/recognition using OpenCV components and can associate recognized or unknown visible people with an event. Recognition depends on suitable local registration data and camera conditions. It identifies people visible in the camera view; it does not calculate exact physical distance to a hazard. Biometric registration data should not be committed publicly.
-
-### 5.6 Decision Engine
-
-Relevant file: `src/decision_engine.py`.
-
-The engine combines available gas, temperature, and camera/fire signals into the configured risk state. The documented conceptual weights are:
-
-- CNN fire signal: 0.50
-- gas risk: 0.35
-- temperature anomaly: 0.15
-
-The implementation also includes a high-risk gas adjustment and an immediate critical override for configured flame/fire conditions. These are application decision rules, not a claim that the fused score is a statistically calibrated probability of an accident.
-
-### 5.7 Predictive risk / early warning
-
-Relevant file: `src/predictive_risk.py`.
-
-The component keeps a rolling history of risk signals, estimates trends with least-squares regression, projects the trend over a short horizon, and classifies the projected risk. It should be described as **short-horizon predictive risk / early warning**, not exact prediction of the time or certainty of a future fire.
-
-### 5.8 Event handling and response interface
-
-Relevant files: `src/predictive_logger.py`, `src/firebase_handler.py`, `src/arduino_reader.py`.
-
-The software can log hazard events and request relay state changes. In simulation mode, relay activation is represented as a simulated action; it does not cut power to a physical machine. Firebase notifications and cloud event storage require valid project configuration and credentials.
-
-### 5.9 Dashboard and API
-
-Relevant file: `dashboard/app.py`.
-
-The Flask dashboard provides a live monitoring view and API routes for sensor/model data, events, video, person registration, and relay reset. The application is intended for a controlled development/demo environment. Do not expose it to a public or shared network without authentication, authorization, and appropriate endpoint protection; the documented implementation has routes that require security hardening before such exposure.
-
-## 6. Data and model artifact inventory
-
-| Asset | Current repository status | Notes |
+| Data/artifact | Path | Purpose |
 |---|---|---|
-| Gas dataset files | Tracked | `data/gas_dataset/batch1.dat` through `batch10.dat` |
-| Gas RF model/scaler/labels | Tracked | Synthetic training assumptions still apply |
-| Temperature dataset | Tracked | Machine temperature time series |
-| LSTM model/scaler/threshold | Tracked | Saved inference artifacts |
-| CNN training/evaluation scripts | Tracked | Multiple workflows available |
-| CNN image dataset | Not tracked | Supply local class folders |
-| Runtime CNN model `cnn_fire_model.h5` | Not present on current main | Train/evaluate compatible model before CNN inference |
-| Person registration/biometric data | Local/private data | Not committed |
-| Firebase service-account key | Not tracked | Configure privately if needed |
+| Gas source batches | `data/gas_dataset/batch1.dat` … `batch10.dat` | Included gas data files; inspect their format before using them in a training workflow |
+| Temperature series | `data/temperature_dataset/machine_temperature_system_failure.csv` | Time-ordered temperature anomaly training series |
+| Gas model | `models/gas_rf_model.pkl` | Trained Random Forest artifact |
+| Gas scaler | `models/gas_scaler.pkl` | Feature scaling |
+| Gas labels | `models/gas_labels.pkl` | Label mapping |
+| LSTM model | `models/lstm_temp_model.h5` | Next-reading prediction |
+| LSTM scaler | `models/lstm_scaler.pkl` | Temperature scaling |
+| LSTM threshold | `models/lstm_threshold.pkl` | Prediction-error threshold |
+| CNN dataset | `data/fire_dataset/fire/`, `data/fire_dataset/no_fire/` | Required local image classes for CNN training |
+| CNN runtime model | `models/cnn_fire_model.h5` | Filename expected by current CNN runtime |
+| CNN candidates and metrics | `models/` and `notebooks/plots/` | Generated by training/evaluation scripts |
+| Person data | `data/person_faces/`, `data/persons.json`, `data/person_lbph.yml` | Local biometric registration and model files |
+| Prediction log | `data/predictive_sensor_log.csv` | Runtime-generated timestamped data |
 
-Never commit service-account keys, API secrets, private face data, or other credentials to Git.
+The current public `main` branch includes the gas and temperature artifacts shown above, but it does not include the CNN image dataset or the runtime CNN model. Supply the image dataset and produce a compatible model before claiming that the CNN trained-inference path is reproducible from a fresh clone. Generated model weights and reports should be committed only if repository size, licensing, and dataset privacy allow it.
 
-## 7. Install and run
+## 8. Requirements and installation
 
-### 7.1 Clone and create an environment
+### Requirements
 
-Windows PowerShell:
+- Windows 10/11, Linux, or another compatible Python environment;
+- Python 3.10 for the currently pinned dependency set;
+- Git;
+- Internet access for initial package installation;
+- Optional: Docker Desktop/Engine;
+- Optional: Arduino board and sensors for serial integration;
+- Optional: webcam for camera inference;
+- Optional: Firebase project and private credentials for cloud functionality.
+
+The dependencies are pinned in `requirements.txt`, including TensorFlow 2.13.0 and NumPy 1.24.3. Install the requirements as a compatible set; do not independently upgrade NumPy or TensorFlow without checking compatibility.
+
+### Windows PowerShell setup
 
 ```powershell
 git clone https://github.com/cloudforge-creator/fyp-hazard-prevention-system.git
@@ -247,9 +352,33 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-If Python 3.10 is not installed, install the Python version required by the pinned dependency set before creating the environment. Do not upgrade NumPy independently of TensorFlow; review the full dependency set together.
+Confirm the environment:
 
-### 7.2 Run software simulation
+```powershell
+python --version
+python -m pip --version
+python -m pytest --version
+```
+
+If PowerShell reports that `Activate.ps1` is missing, verify that the virtual environment was successfully created in the current repository directory before activating it.
+
+### Linux/macOS shell setup
+
+```bash
+git clone https://github.com/cloudforge-creator/fyp-hazard-prevention-system.git
+cd fyp-hazard-prevention-system
+
+python3.10 -m venv venv
+source venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+## 9. Run the application
+
+Run commands from the repository root with the virtual environment activated.
+
+### Simulation without Firebase
 
 ```powershell
 python src/main.py --sim --no-firebase
@@ -257,69 +386,174 @@ python src/main.py --sim --no-firebase
 
 Open [http://localhost:5000](http://localhost:5000).
 
-Simulation mode is useful for demonstrating application flow without Arduino hardware. Because the CNN runtime artifact is absent from the current repository snapshot, the CNN path may report that its trained model is unavailable until a compatible model has been trained and installed. Do not interpret a simulation-only run as validation of trained camera inference.
+Simulation mode does not require Arduino hardware. It uses synthetic readings and simulated response behavior. The current CNN artifact is not included in the public tree, so the camera model path may report an unavailable model until a compatible artifact has been trained and installed.
 
-Other options documented by the application include:
+### Available command-line options
+
+| Argument | Purpose |
+|---|---|
+| `--sim` | Use simulated sensor values instead of a serial-connected board |
+| `--port COM4` | Select a specific serial port (example only; use the actual port) |
+| `--no-firebase` | Disable live Firebase use for a local demo |
+| `--sim-camera` | Enable the real webcam while sensor values remain simulated |
+| `--web-port 8000` | Change the Flask dashboard port |
+
+Examples:
 
 ```powershell
 python src/main.py --sim
+python src/main.py --sim --no-firebase --web-port 8000
 python src/main.py --port COM4
-python src/main.py --no-firebase
-python src/main.py --sim --web-port 8000
+python src/main.py --sim --sim-camera --no-firebase
 ```
 
-Use `--no-firebase` when cloud credentials are not configured.
+Use `Ctrl+C` in the terminal to stop the application. Check the startup logs for the selected mode, model-loading messages, camera availability, and Firebase status. Do not assume hardware is connected merely because the application started.
 
-## 8. Train and evaluate models
+## 10. Train and evaluate the models
 
-Run commands from the repository root in the activated environment.
+Training commands must be executed from the repository root. Ensure the environment has the dependencies installed and the corresponding input data is present.
 
-### Gas Random Forest
+### 10.1 Gas Random Forest
 
 ```powershell
 python notebooks/01_train_gas_model.py
 ```
 
-This script trains from its configured synthetic MQ-2 profile generator and saves artifacts under `models/`. Treat its metrics as synthetic-data evaluation, not independent sensor validation.
+The script generates synthetic profiles from configured MQ-2-style ratio assumptions, splits samples, scales features, applies SMOTE to the training portion, trains a Random Forest, and writes model/scaler/label artifacts and plots. Read the script's comments before interpreting the metrics: synthetic-data performance does not demonstrate performance on independent physical sensor data.
 
-### Temperature LSTM
+### 10.2 Temperature LSTM
 
 ```powershell
 python notebooks/02_train_lstm_model.py
 ```
 
-The script reads the tracked temperature dataset and saves the model/scaler/threshold artifacts under `models/`.
+The script reads the temperature CSV, validates the required `timestamp` and `value` columns, sorts the series, creates 50-step sequences, uses a time-ordered validation segment, trains the LSTM, and saves the best model with scaling and anomaly-threshold artifacts. Inspect its generated metrics and plots before replacing tracked artifacts.
 
-### CNN fire classifier
+### 10.3 CNN fire classifier
 
-First supply the local dataset:
+Prepare the local dataset in this form:
 
 ```text
-data/
-└── fire_dataset/
-    ├── fire/
-    └── no_fire/
+data/fire_dataset/
+├── fire/
+│   ├── fire_image_001.jpg
+│   └── ...
+└── no_fire/
+    ├── normal_image_001.jpg
+    └── ...
 ```
 
-For the duplicate-aware workflow:
+The original training script is:
+
+```powershell
+python notebooks/03_train_cnn_model.py
+```
+
+For the duplicate-aware manifest workflow, use:
 
 ```powershell
 python notebooks/06_build_cnn_split_manifest.py
 python notebooks/07_train_cnn_manifest.py
 python notebooks/08_evaluate_cnn_manifest.py --model models/cnn_fire_model_candidate.h5
+python notebooks/09_evaluate_cnn_unseen_photos.py --help
 ```
 
-Review [notebooks/CNN_TRAINING_WORKFLOW.md](notebooks/CNN_TRAINING_WORKFLOW.md) before running these commands. The workflow writes candidate artifacts and evaluation outputs; the runtime's expected filename is `models/cnn_fire_model.h5`. Only promote a selected compatible candidate after evaluation and verification. Do not overwrite the runtime model merely because training completed.
+Review [CNN_TRAINING_WORKFLOW.md](notebooks/CNN_TRAINING_WORKFLOW.md) before training. The manifest-aware workflow groups exact and likely duplicate images so that groups are not spread across training, validation, and test subsets. Inspect any duplicate-label conflicts manually. Select a candidate using validation metrics, then use the held-out test split for final evaluation; do not tune a threshold based on test results.
 
-## 9. Tests, CI, and Docker
+The candidate model name is not automatically the same as the runtime filename. The current runtime expects `models/cnn_fire_model.h5`. Promote a selected compatible candidate only after checking the evaluation results, class mapping, model input/output shape, preprocessing, and inference integration. A YOLO training log or YOLO weights are not compatible with this Keras loader by filename alone.
 
-Run unit tests:
+### 10.4 General model evaluation
+
+`notebooks/04_evaluate_models.py` supports CNN evaluation and optionally labeled gas/temperature evaluation when supplied with the expected CSV format. CNN evaluation using the simple validation split is validation evidence, not an independent held-out test result. The manifest-aware evaluation scripts should be used for the duplicate-aware candidate workflow.
+
+Recommended metrics for classification include accuracy, per-class precision, recall, F1-score, confusion matrix, and—where appropriate—ROC-AUC. For forecasting/regression, report MAE/RMSE in both scaled and meaningful original units where possible. Record the dataset version, split strategy, model hash, threshold, software environment, and exact command used for every reported result.
+
+## 11. Dashboard and API reference
+
+The Flask server is defined in `dashboard/app.py`. The default port is 5000.
+
+| Route | Method | Purpose |
+|---|---|---|
+| `/` | GET | Serve the main monitoring dashboard |
+| `/data` | GET | Return the current in-memory sensor/model/risk state as JSON |
+| `/events` | GET | Return recent Firebase events when available, otherwise local event history |
+| `/video` | GET | Stream annotated camera frames as multipart MJPEG when frames are available |
+| `/health` | GET | Return a simple health status and application uptime |
+| `/persons` | GET | Return registered-person metadata when the callback is configured |
+| `/persons/register` | POST | Register a person from multipart form fields and image uploads |
+| `/reset_relay` | POST | Request a relay reset through the decision engine |
+
+### Person registration request
+
+The registration endpoint expects multipart form data:
+
+- `person_id`: stable local identifier;
+- `name`: display name;
+- `designation`: role/designation;
+- `images`: one or more uploaded face images.
+
+The endpoint depends on the recognition callback being configured. Validate uploads and protect this endpoint before network exposure. Face data is sensitive personal data and must be collected and stored only with appropriate authorization.
+
+### Example: query live data
+
+PowerShell:
+
+```powershell
+Invoke-RestMethod http://localhost:5000/data
+Invoke-RestMethod http://localhost:5000/events
+Invoke-RestMethod http://localhost:5000/health
+```
+
+The JSON response fields depend on the current sensor cycle and initialized modules. A `null` fire probability can mean the trained CNN model/camera inference is unavailable; interpret it as unavailable rather than as zero risk.
+
+## 12. Firebase and notification configuration
+
+Firebase is optional for a local simulation. The handler currently expects the database URL in `src/firebase_handler.py` and a private service-account JSON file at the configured path. The browser push-registration page also requires the correct Firebase web configuration and messaging settings.
+
+### Configuration steps
+
+1. Create or select the project in the Firebase console.
+2. Enable and configure Realtime Database with appropriate access rules.
+3. Configure a service account and store its key privately.
+4. Set the correct database URL in the private/local configuration.
+5. Configure the web application's Firebase settings and required messaging/VAPID settings.
+6. Register a supported client device and grant notification permission.
+7. Verify a real test notification end-to-end and review server logs.
+8. Keep database rules restrictive and rotate any credential that was accidentally exposed.
+
+The repository's placeholder URL is not a live Firebase project. Without valid configuration, the handler falls back to simulation behavior. A successful local code path or simulated log line is not proof of cloud write success or real device notification delivery.
+
+For local use without Firebase:
+
+```powershell
+python src/main.py --sim --no-firebase
+```
+
+Never commit `serviceAccountKey.json`, FCM tokens, private keys, or other secrets.
+
+## 13. Person registration and privacy
+
+The recognition component stores its local data under `data/person_faces/`, `data/persons.json`, and `data/person_lbph.yml`. These are runtime/local assets and are not part of the ordinary public source tree.
+
+Operational guidance:
+
+- obtain appropriate consent before enrolling anyone;
+- restrict filesystem and endpoint access to face images and recognition files;
+- do not upload biometric data to public repositories or issue trackers;
+- use strong registration identifiers and avoid exposing personal details in logs;
+- provide a process to correct or remove registration data;
+- evaluate recognition performance under expected lighting, pose, and camera conditions;
+- treat unknown or low-confidence faces as unknown, not as a verified identity.
+
+## 14. Testing and continuous integration
+
+Run the unit tests from the repository root:
 
 ```powershell
 python -m pytest -q
 ```
 
-Compile the manifest-aware CNN workflow scripts:
+Compile the manifest-aware CNN scripts:
 
 ```powershell
 python -m py_compile notebooks/06_build_cnn_split_manifest.py
@@ -328,119 +562,194 @@ python -m py_compile notebooks/08_evaluate_cnn_manifest.py
 python -m py_compile notebooks/09_evaluate_cnn_unseen_photos.py
 ```
 
-Build the Docker image:
+The GitHub Actions workflow in `.github/workflows/software-validation.yml` is triggered on pushes to `main` and `chore/**`, and pull requests targeting `main`. It installs the pinned dependencies on Python 3.10, compiles the manifest-aware CNN scripts, runs pytest, and builds the Docker simulation image.
+
+A green workflow proves only the checks included in that workflow passed for that commit. It does not prove that the physical sensors are calibrated, the webcam performs reliably on unseen scenes, Firebase credentials are valid, push notifications reach a device, or the dashboard is safe to expose to a network.
+
+## 15. Docker
+
+Build the simulation image:
 
 ```powershell
 docker build -t fyp-hazard-prevention .
 ```
 
-The GitHub Actions workflow at `.github/workflows/software-validation.yml` installs dependencies, compiles CNN workflow scripts, runs pytest, and builds the simulation image. CI passing means those configured checks passed for that commit; it does not prove physical sensor behavior, live Firebase delivery, production security, or accuracy on unseen camera footage.
-
-## 10. Validation evidence and interpretation
-
-The repository includes [docs/SOFTWARE_VALIDATION.md](docs/SOFTWARE_VALIDATION.md) and [docs/PROJECT_HEALTH_AUDIT_2026-10-16.md](docs/PROJECT_HEALTH_AUDIT_2026-10-16.md).
-
-These documents record historical checks for a previously reviewed commit, including a documented 150-cycle simulation and a prior CI run. They are historical evidence, not a claim that the exact current commit has just been rerun. Always use the commit SHA and associated Actions run when reporting validation.
-
-Report model quality using an appropriate held-out labeled test set and metrics such as precision, recall, F1, confusion matrix, and (where applicable) ROC-AUC. Runtime success alone does not establish model accuracy. Do not present a target accuracy as an achieved result.
-
-## 11. Firebase configuration
-
-Firebase is optional for the local software-only demo. To enable it, configure the appropriate private service-account credentials, Realtime Database URL, web configuration, and FCM/VAPID settings required by the implementation. Keep all private credentials out of source control.
-
-Without valid credentials, use:
+Run it:
 
 ```powershell
-python src/main.py --sim --no-firebase
+docker run --rm -p 5000:5000 fyp-hazard-prevention
 ```
 
-A code path for notification delivery does not prove that a real device received a notification. Verify actual delivery separately when Firebase is configured.
+Open [http://localhost:5000](http://localhost:5000).
 
-## 12. Arduino interface (hardware integration)
+The Dockerfile uses Python 3.10 slim, installs the pinned requirements and OS libraries needed by OpenCV, copies the application source/dashboard/model artifacts, and starts simulation mode with Firebase disabled. The image is intended for a software demo. It does not automatically include local datasets, local biometric data, Firebase credentials, a webcam, or an attached serial device. Container build success is not an end-to-end model or hardware test.
 
-The Arduino sketch is at `arduino/hazard_sensors.ino`. The intended serial protocol uses 9600 baud and the documented pin mapping is:
+## 16. Arduino and physical integration
 
-| Component | Pin |
+The repository includes `arduino/hazard_sensors.ino` and `docs/HARDWARE_SETUP.md`. The reader defaults to 9600 baud and expects key/value serial fields for gas raw reading, gas ratio, temperature, humidity, and flame state, with an end marker. The exact controller board, pin mapping, sensor revisions, and electrical levels must be confirmed against the actual hardware.
+
+### Safe bring-up order
+
+1. Inspect the exact board and sensor datasheets.
+2. Verify supply voltage, logic levels, grounding, analog input limits, and relay polarity.
+3. Keep mains and hazardous loads disconnected during initial tests.
+4. Start the application in simulation mode and verify the dashboard.
+5. Connect the board with the relay load disconnected; select the actual serial port.
+6. Verify that every serial field is valid and compare readings with appropriate reference instruments.
+7. Test relay commands using a safe low-voltage test load.
+8. Perform controlled sensor tests under supervision and record calibration values.
+9. Validate the complete response path only after independent electrical and safety review.
+
+Do not rely on assumed pin numbers from an old setup. Follow [docs/HARDWARE_SETUP.md](docs/HARDWARE_SETUP.md) and confirm the actual board and module specifications before wiring.
+
+## 17. Configuration and operational behavior
+
+| Setting | Current behavior |
 |---|---|
-| MQ-2 gas sensor | A0 |
-| DHT22 temperature/humidity sensor | D2 |
-| Flame sensor | D4 |
-| Relay module | D7 |
+| Simulation mode | Synthetic sensor values and simulated relay response |
+| Serial mode | Attempts auto-discovery or uses the provided serial port |
+| Serial baud rate | 9600 by default |
+| Main processing loop | Targets roughly 0.5-second cycles |
+| Dashboard port | 5000 by default; configurable via `--web-port` |
+| CNN input | 224 × 224 RGB after preprocessing |
+| LSTM input | 50 historical readings |
+| Risk history | Configured in `src/decision_engine.py` / `src/predictive_risk.py` |
+| Firebase | Optional; requires private valid project configuration |
+| Person recognition | Local OpenCV Haar + LBPH; requires registered examples |
+| Event history | Local in-memory recent history, with optional Firebase-backed retrieval |
+| Predictive CSV | `data/predictive_sensor_log.csv` by default |
 
-Use `python src/main.py --port COM4` with the correct port when the physical board is connected. Check [docs/HARDWARE_SETUP.md](docs/HARDWARE_SETUP.md) for wiring and setup guidance.
+The implementation contains fallback paths for some missing model or connection cases. Always inspect startup messages and the live data payload to determine whether each model, camera, serial connection, and external service is actually available. A fallback may keep the dashboard running while providing lower-fidelity behavior than the trained model.
 
-Physical calibration, sensor accuracy, electrical safety, relay switching, and camera placement are outside software-only validation. Never connect a live machine or rely on this academic prototype for real-life safety without appropriate engineering review and independent safety testing.
+## 18. Troubleshooting
 
-## 13. Scope and completion statement
-
-The project software scope comprises the application modules, model-training/inference code, decision logic, predictive-risk logic, dashboard/API, optional Firebase integration, simulation mode, test suite, CI workflow, Docker configuration, and technical documentation present in this repository.
-
-For academic project reporting, distinguish these separate dimensions:
-
-- **Software implementation:** source modules and integration included in the defined software-only prototype scope.
-- **Reproducibility of trained inference:** depends on the required dataset and model artifacts being available; the CNN runtime model and image dataset are not present in the current public main branch.
-- **Software verification:** limited to the specific tests, CI runs, and historical simulation evidence recorded for their respective commits.
-- **External configuration:** Firebase credentials, local person-registration data, camera availability, and serial-device configuration are environment-specific.
-- **Physical commissioning:** hardware calibration and physical response testing are separate from software implementation.
-
-This repository is an academic prototype. It is not a certified fire-protection product and must not be represented as production-ready or as guaranteeing prevention of hazards.
-
-## 14. Troubleshooting
-
-**PowerShell cannot activate the environment**
+### Virtual environment activation fails (PowerShell)
 
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\venv\Scripts\Activate.ps1
 ```
 
-**Port 5000 is occupied**
+If the script does not exist, create the environment first with `py -3.10 -m venv venv` from the repository root.
+
+### Dependency installation or TensorFlow import fails
+
+Check that the correct virtual environment is active and Python is the intended version:
+
+```powershell
+python --version
+python -m pip show tensorflow numpy
+```
+
+Use the pinned requirements as a set. Do not independently upgrade NumPy beyond the compatible version required by the pinned TensorFlow package.
+
+### CNN model is not found
+
+Confirm that the dataset is present in `data/fire_dataset/fire/` and `data/fire_dataset/no_fire/`. Follow the manifest-aware training workflow, evaluate the candidate, verify class order and preprocessing, then install the selected compatible model at `models/cnn_fire_model.h5`.
+
+### Camera unavailable
+
+Check OS camera permissions, whether another application is using the camera, and whether OpenCV can open the intended device. A camera-disabled simulation can run without live frames. Do not interpret camera unavailability as evidence that no fire exists.
+
+### Firebase is not connected
+
+Check the configured database URL, private service-account path, database rules, Firebase web configuration, and messaging settings. Use `--no-firebase` for a local demo without cloud credentials.
+
+### Serial board is not detected
+
+Confirm the correct port in Device Manager or the operating system's serial-device listing. Close serial monitor applications that may be holding the port. Check baud rate, wiring, board power, and the expected serial protocol. Verify the log indicates hardware mode rather than fallback simulation.
+
+### Port 5000 is already in use
 
 ```powershell
 python src/main.py --sim --no-firebase --web-port 8000
 ```
 
-Then open [http://localhost:8000](http://localhost:8000).
+Open [http://localhost:8000](http://localhost:8000).
 
-**CNN model is not found**
+### Tests fail
 
-Confirm the local dataset is arranged under `data/fire_dataset/fire/` and `data/fire_dataset/no_fire/`, follow the CNN training workflow, evaluate a candidate, and place the selected compatible Keras model at `models/cnn_fire_model.h5`.
+Run `python -m pytest -q`, read the first failing assertion/traceback, and reproduce the failure before changing code. Do not treat a test failure as a reason to delete the test or silently weaken its assertion.
 
-**Firebase errors**
+## 19. Security, safety, and limitations
 
-Check private credentials and project configuration, or use `--no-firebase` for a local simulation.
+- **Dashboard access:** The current Flask dashboard binds to `0.0.0.0`, and the control/registration routes do not implement authentication and authorization in the reviewed code. Restrict it to a trusted local environment; do not expose it to a public or shared network until access controls and endpoint protections are added and tested.
+- **Sensor faults:** Serial connection/read errors can lead to simulation fallback, and some application paths substitute defaults for missing readings. For real deployment, sensor-disconnected, stale, invalid, and out-of-range values must be surfaced as explicit faults rather than silently treated as normal readings.
+- **CNN availability:** A missing or unloaded CNN artifact means trained camera inference is unavailable. A heuristic visual cue is not a replacement for a validated classifier.
+- **Gas classification:** The gas model's synthetic training assumptions limit what its metrics can establish. Validate with independent data from the intended sensor and controlled concentrations.
+- **Temperature anomaly detection:** An anomaly in a public machine-temperature series does not automatically represent a fire condition in the intended physical environment.
+- **Person recognition:** Face detection and LBPH recognition are affected by image conditions and should not be treated as infallible identity verification.
+- **Predictive risk:** Trend extrapolation is a heuristic, not a guaranteed prediction of a future event or exact incident time.
+- **Firebase:** External cloud delivery depends on real configuration, permissions, network connectivity, and client registration.
+- **Physical response:** Simulated relay logs do not switch a physical relay. Electrical isolation, relay polarity, load ratings, and safe-state behavior require hardware validation.
+- **No certification:** The system has not been demonstrated here to meet any industrial fire alarm, gas detector, or functional-safety standard.
 
-**Tests fail**
+## 20. Verification and reporting guidance
 
-Run `python -m pytest -q`, identify the failing test, and review the error before changing implementation or dependency versions.
+The repository contains [docs/SOFTWARE_VALIDATION.md](docs/SOFTWARE_VALIDATION.md) and [docs/PROJECT_HEALTH_AUDIT_2026-10-16.md](docs/PROJECT_HEALTH_AUDIT_2026-10-16.md). They record checks and observations associated with a previously reviewed commit, including a historical local simulation and an earlier CI run.
 
-## 15. Development workflow
+When preparing a report or demonstration, identify the exact commit and date for every test result. Do not present historical test output as a fresh test of the current commit. Do not claim an accuracy target was achieved unless the exact model, data split, evaluation script, and metrics support that claim.
+
+A complete verification record should include:
+
+- repository commit SHA and working-tree status;
+- Python and dependency versions;
+- dataset source, version, license, class counts, and split strategy;
+- model artifact names and cryptographic hashes;
+- training parameters and random seeds;
+- independent evaluation metrics and confusion matrices;
+- unit-test output and CI run URL;
+- simulation steps and logs;
+- Firebase test-delivery evidence if enabled;
+- physical calibration and relay-test records when hardware is in scope;
+- known limitations and acceptance criteria.
+
+## 21. Development and handover checklist
+
+### Reproducible software handover
+
+- [ ] Clone the repository into a clean directory.
+- [ ] Create the Python environment and install the pinned requirements.
+- [ ] Record the exact Python version and Git commit SHA.
+- [ ] Run pytest and save the test output.
+- [ ] Build the Docker simulation image.
+- [ ] Start simulation mode and inspect dashboard/API state.
+- [ ] Verify the expected gas and LSTM artifacts load.
+- [ ] Provide the local CNN dataset and selected compatible CNN model if trained camera inference is required.
+- [ ] Confirm Firebase configuration is private and optional services are either configured or intentionally disabled.
+- [ ] Keep face registration files and secrets out of Git.
+- [ ] Record model metrics with the dataset split and evaluation command.
+- [ ] Document any remaining environment-specific assumptions in the project handover.
+
+### Git workflow
 
 ```text
-Create branch
-    ↓
-Make a focused change
-    ↓
-Run relevant tests
-    ↓
-Run the software simulation
-    ↓
+Create a focused branch
+        ↓
+Make one logically scoped change
+        ↓
+Run relevant tests locally
+        ↓
+Review the diff and remove secrets/data
+        ↓
 Commit and push
-    ↓
-Open pull request
-    ↓
+        ↓
+Open a pull request
+        ↓
 Review CI results
-    ↓
+        ↓
 Merge after review
 ```
 
-## 16. Key documentation
+## 22. Project documentation
 
-- [Software validation report](docs/SOFTWARE_VALIDATION.md)
-- [Project health audit](docs/PROJECT_HEALTH_AUDIT_2026-10-16.md)
-- [Hardware setup](docs/HARDWARE_SETUP.md)
-- [CNN training workflow](notebooks/CNN_TRAINING_WORKFLOW.md)
+- [Software Validation Report](docs/SOFTWARE_VALIDATION.md)
+- [Project Health and Release-Readiness Audit](docs/PROJECT_HEALTH_AUDIT_2026-10-16.md)
+- [Hardware Setup and Bring-Up Checklist](docs/HARDWARE_SETUP.md)
+- [CNN Training Workflow](notebooks/CNN_TRAINING_WORKFLOW.md)
+- [Contribution Guidelines](CONTRIBUTING.md)
+- [GitHub Actions Workflow](.github/workflows/software-validation.yml)
 
 ## License
 
-This is an academic Final Year Project. No open-source license is currently declared. Reuse and redistribution permissions should be specified by the project owners before public reuse.
+No open-source license is currently declared in this repository. The project owners should select and add a license before granting public reuse or redistribution rights. Dataset and pretrained-model licenses must also be checked independently.
